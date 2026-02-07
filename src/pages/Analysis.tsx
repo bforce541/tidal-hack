@@ -11,10 +11,10 @@ import { SettingsDrawer } from '@/components/analysis/SettingsDrawer';
 import { generateExampleData } from '@/lib/example-data';
 
 const STEPS = [
-  { component: UploadStep, label: 'Upload & Configure' },
-  { component: AlignmentStep, label: 'Alignment Results' },
-  { component: MatchingStep, label: 'Matched Anomalies' },
-  { component: GrowthStep, label: 'Growth & Exceptions' },
+  { component: UploadStep, label: 'Upload' },
+  { component: AlignmentStep, label: 'Alignment' },
+  { component: MatchingStep, label: 'Matching' },
+  { component: GrowthStep, label: 'Growth' },
   { component: ExportStep, label: 'Export' },
 ];
 
@@ -34,14 +34,20 @@ function AnalysisContent() {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <StepSidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b bg-card px-6 py-3 shrink-0">
-          <h2 className="text-lg font-semibold text-foreground">
-            {STEPS[state.step]?.label ?? 'Upload & Configure'}
-          </h2>
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <header className="flex items-center justify-between border-b bg-card px-4 h-10 shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+              Step {state.step + 1}/{STEPS.length}
+            </span>
+            <span className="text-xs text-border">|</span>
+            <span className="text-xs font-medium text-foreground">
+              {STEPS[state.step]?.label ?? 'Upload'}
+            </span>
+          </div>
           <SettingsDrawer />
         </header>
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto p-4">
           <CurrentStep />
         </main>
       </div>

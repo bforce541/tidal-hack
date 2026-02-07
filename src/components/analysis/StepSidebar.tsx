@@ -1,13 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { useAnalysis } from '@/context/AnalysisContext';
-import { Upload, GitCompare, Layers, TrendingUp, Download, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Upload, GitCompare, Layers, TrendingUp, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const steps = [
-  { icon: Upload, label: 'Upload & Configure', key: 0 },
-  { icon: GitCompare, label: 'Alignment Results', key: 1 },
-  { icon: Layers, label: 'Matched Anomalies', key: 2 },
-  { icon: TrendingUp, label: 'Growth & Exceptions', key: 3 },
+  { icon: Upload, label: 'Upload', key: 0 },
+  { icon: GitCompare, label: 'Alignment', key: 1 },
+  { icon: Layers, label: 'Matching', key: 2 },
+  { icon: TrendingUp, label: 'Growth', key: 3 },
   { icon: Download, label: 'Export', key: 4 },
 ];
 
@@ -25,24 +25,21 @@ export function StepSidebar() {
   };
 
   return (
-    <aside className="flex w-64 flex-col border-r bg-sidebar text-sidebar-foreground shrink-0">
-      <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-4">
+    <aside className="flex w-48 flex-col border-r bg-sidebar text-sidebar-foreground shrink-0">
+      <div className="flex items-center gap-2 border-b border-sidebar-border px-3 h-10">
         <button
           onClick={() => navigate('/')}
-          className="flex items-center gap-2 text-sm text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors"
+          className="flex items-center gap-1.5 text-2xs text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors font-mono uppercase tracking-wider"
         >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back to Home</span>
+          <ArrowLeft className="h-3 w-3" />
+          Home
         </button>
       </div>
 
-      <div className="px-4 py-3">
-        <span className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">
-          Analysis Steps
-        </span>
-      </div>
-
-      <nav className="flex-1 px-3">
+      <nav className="flex-1 py-2 px-2">
+        <p className="text-2xs font-mono uppercase tracking-widest text-sidebar-foreground/40 px-2 py-1.5 mb-1">
+          Pipeline
+        </p>
         {steps.map((step, idx) => {
           const isActive = state.step === step.key;
           const isCompleted = canNavigateTo(step.key + 1);
@@ -54,38 +51,57 @@ export function StepSidebar() {
               onClick={() => isClickable && dispatch({ type: 'SET_STEP', step: step.key })}
               disabled={!isClickable}
               className={cn(
-                'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors mb-1',
-                isActive && 'bg-sidebar-accent text-sidebar-accent-foreground font-medium',
-                !isActive && isClickable && 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
-                !isClickable && 'text-sidebar-foreground/30 cursor-not-allowed',
+                'flex w-full items-center gap-2 px-2 py-1.5 text-xs transition-colors',
+                isActive && 'bg-sidebar-accent text-sidebar-accent-foreground',
+                !isActive && isClickable && 'text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+                !isClickable && 'text-sidebar-foreground/25 cursor-not-allowed',
               )}
             >
-              <div
-                className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold shrink-0',
-                  isActive && 'bg-sidebar-primary text-sidebar-primary-foreground',
-                  isCompleted && !isActive && 'bg-sidebar-primary/20 text-sidebar-primary',
-                  !isCompleted && !isActive && 'bg-sidebar-accent text-sidebar-foreground/40',
-                )}
-              >
+              <span className={cn(
+                'flex h-4 w-4 items-center justify-center text-2xs font-mono shrink-0',
+                isActive && 'text-sidebar-primary',
+                isCompleted && !isActive && 'text-sidebar-primary/70',
+              )}>
                 {isCompleted && !isActive ? '✓' : idx + 1}
-              </div>
-              <span className="truncate">{step.label}</span>
+              </span>
+              <span className="truncate font-mono text-2xs uppercase tracking-wider">{step.label}</span>
             </button>
           );
         })}
       </nav>
 
       {state.runs.length > 0 && (
-        <div className="border-t border-sidebar-border px-5 py-4">
-          <p className="text-xs text-sidebar-foreground/50 mb-2">Loaded Runs</p>
+        <div className="border-t border-sidebar-border px-3 py-2">
+          <p className="text-2xs font-mono uppercase tracking-widest text-sidebar-foreground/40 mb-1.5">Runs</p>
           {state.runs.map((r) => (
-            <p key={r.id} className="text-xs text-sidebar-foreground/70 truncate">
-              {r.name}
-            </p>
+            <div key={r.id} className="flex items-center gap-1.5 py-0.5">
+              <span className="h-1 w-1 bg-sidebar-primary shrink-0" />
+              <p className="text-2xs text-sidebar-foreground/60 truncate font-mono">{r.name}</p>
+            </div>
           ))}
         </div>
       )}
+
+      {state.qualityMetrics && (
+        <div className="border-t border-sidebar-border px-3 py-2">
+          <p className="text-2xs font-mono uppercase tracking-widest text-sidebar-foreground/40 mb-1.5">Stats</p>
+          <div className="grid grid-cols-2 gap-1">
+            <Stat label="Anchors" value={state.qualityMetrics.totalAnchors} />
+            <Stat label="Matched" value={state.qualityMetrics.totalAnomalies} />
+            <Stat label="Except." value={state.qualityMetrics.newAnomalies + state.qualityMetrics.missingAnomalies} />
+            <Stat label="Uncertain" value={state.qualityMetrics.uncertain} />
+          </div>
+        </div>
+      )}
     </aside>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-2xs text-sidebar-foreground/40">{label}</p>
+      <p className="text-xs font-mono text-sidebar-foreground">{value}</p>
+    </div>
   );
 }

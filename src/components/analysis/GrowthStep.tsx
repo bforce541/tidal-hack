@@ -1,165 +1,153 @@
 import { useAnalysis } from '@/context/AnalysisContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TrendingUp, AlertTriangle, Plus, Minus, HelpCircle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { LucideIcon } from 'lucide-react';
 
-const exceptionConfig: Record<string, { color: string; Icon: LucideIcon }> = {
-  NEW: { color: 'bg-info', Icon: Plus },
-  MISSING: { color: 'bg-warning', Icon: Minus },
-  UNCERTAIN: { color: 'bg-confidence-uncertain', Icon: HelpCircle },
-  RAPID_GROWTH: { color: 'bg-destructive', Icon: TrendingUp },
+const exceptionStyles: Record<string, string> = {
+  NEW: 'bg-info text-accent-foreground',
+  MISSING: 'bg-warning text-accent-foreground',
+  UNCERTAIN: 'bg-confidence-uncertain text-accent-foreground',
+  RAPID_GROWTH: 'bg-destructive text-destructive-foreground',
 };
 
 export function GrowthStep() {
   const { state, dispatch } = useAnalysis();
 
   if (state.growthResults.length === 0 && state.exceptions.length === 0) {
-    return <p className="text-muted-foreground">No growth data yet.</p>;
+    return <p className="text-xs text-muted-foreground">No growth data yet.</p>;
   }
 
   const hasRates = state.growthResults.some(g => g.depth_rate != null);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground mb-2">Growth & Exceptions</h2>
-        <p className="text-muted-foreground">
-          {state.growthResults.length} growth calculations, {state.exceptions.length} exceptions flagged
-          {hasRates && state.growthResults[0]?.years_between != null &&
-            ` (${state.growthResults[0].years_between.toFixed(1)} years between runs)`}
-        </p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Growth & Exceptions</h2>
+          <p className="text-2xs text-muted-foreground mt-0.5">
+            {state.growthResults.length} growth records · {state.exceptions.length} exceptions
+            {hasRates && state.growthResults[0]?.years_between != null && ` · ${state.growthResults[0].years_between.toFixed(1)}yr span`}
+          </p>
+        </div>
+        <Button variant="default" size="sm" onClick={() => dispatch({ type: 'SET_STEP', step: 4 })} className="font-mono text-xs uppercase tracking-wider">
+          Export →
+        </Button>
       </div>
 
+      {/* Summary bar */}
       {state.qualityMetrics && (
-        <div className="grid gap-3 md:grid-cols-5">
-          <MiniMetric label="High Confidence" value={state.qualityMetrics.matchedHigh} color="text-success" />
-          <MiniMetric label="Medium" value={state.qualityMetrics.matchedMed} color="text-info" />
-          <MiniMetric label="Low" value={state.qualityMetrics.matchedLow} color="text-warning" />
-          <MiniMetric label="Uncertain" value={state.qualityMetrics.uncertain} color="text-destructive" />
-          <MiniMetric label="Rapid Growth" value={state.qualityMetrics.rapidGrowth} color="text-destructive" />
+        <div className="flex gap-6 border-b pb-3">
+          <MetricInline label="HIGH" value={state.qualityMetrics.matchedHigh} color="text-success" />
+          <MetricInline label="MED" value={state.qualityMetrics.matchedMed} color="text-info" />
+          <MetricInline label="LOW" value={state.qualityMetrics.matchedLow} color="text-warning" />
+          <MetricInline label="UNCERTAIN" value={state.qualityMetrics.uncertain} color="text-destructive" />
+          <MetricInline label="NEW" value={state.qualityMetrics.newAnomalies} />
+          <MetricInline label="MISSING" value={state.qualityMetrics.missingAnomalies} />
+          <MetricInline label="RAPID" value={state.qualityMetrics.rapidGrowth} color="text-destructive" />
         </div>
       )}
 
       <Tabs defaultValue="growth">
-        <TabsList>
-          <TabsTrigger value="growth">Growth ({state.growthResults.length})</TabsTrigger>
-          <TabsTrigger value="exceptions">Exceptions ({state.exceptions.length})</TabsTrigger>
+        <TabsList className="h-7">
+          <TabsTrigger value="growth" className="text-2xs font-mono uppercase">Growth ({state.growthResults.length})</TabsTrigger>
+          <TabsTrigger value="exceptions" className="text-2xs font-mono uppercase">Exceptions ({state.exceptions.length})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="growth">
-          <Card>
-            <CardContent className="p-0">
-              <div className="max-h-[450px] overflow-auto">
+        <TabsContent value="growth" className="mt-3">
+          <div className="border bg-card">
+            <div className="max-h-[calc(100vh-280px)] overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="text-2xs font-mono uppercase sticky top-0 bg-muted/50 z-10">Group</TableHead>
+                    <TableHead className="text-2xs font-mono uppercase sticky top-0 bg-muted/50 z-10">Depth Δ%</TableHead>
+                    <TableHead className="text-2xs font-mono uppercase sticky top-0 bg-muted/50 z-10">Len Δ</TableHead>
+                    <TableHead className="text-2xs font-mono uppercase sticky top-0 bg-muted/50 z-10">Wid Δ</TableHead>
+                    {hasRates && <>
+                      <TableHead className="text-2xs font-mono uppercase sticky top-0 bg-muted/50 z-10">Depth/yr</TableHead>
+                      <TableHead className="text-2xs font-mono uppercase sticky top-0 bg-muted/50 z-10">Len/yr</TableHead>
+                    </>}
+                    <TableHead className="text-2xs font-mono uppercase sticky top-0 bg-muted/50 z-10">Flag</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {state.growthResults.map(gr => (
+                    <TableRow key={gr.group_id} className={gr.flag ? 'bg-destructive/5' : ''}>
+                      <TableCell className="font-mono-data">{gr.group_id}</TableCell>
+                      <TableCell className={cn('font-mono-data', gr.depth_delta != null && gr.depth_delta > 0 ? 'text-destructive' : '')}>
+                        {gr.depth_delta != null ? (gr.depth_delta > 0 ? '+' : '') + gr.depth_delta.toFixed(2) : '—'}
+                      </TableCell>
+                      <TableCell className="font-mono-data">
+                        {gr.length_delta != null ? (gr.length_delta > 0 ? '+' : '') + gr.length_delta.toFixed(2) : '—'}
+                      </TableCell>
+                      <TableCell className="font-mono-data">
+                        {gr.width_delta != null ? (gr.width_delta > 0 ? '+' : '') + gr.width_delta.toFixed(2) : '—'}
+                      </TableCell>
+                      {hasRates && <>
+                        <TableCell className="font-mono-data">{gr.depth_rate != null ? gr.depth_rate.toFixed(3) : '—'}</TableCell>
+                        <TableCell className="font-mono-data">{gr.length_rate != null ? gr.length_rate.toFixed(3) : '—'}</TableCell>
+                      </>}
+                      <TableCell>
+                        {gr.flag && (
+                          <span className="inline-flex items-center gap-0.5 px-1 text-2xs font-mono bg-destructive text-destructive-foreground">
+                            <AlertTriangle className="h-2.5 w-2.5" />{gr.flag}
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="exceptions" className="mt-3">
+          {state.exceptions.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-6 text-center border">No exceptions.</p>
+          ) : (
+            <div className="border bg-card">
+              <div className="max-h-[calc(100vh-280px)] overflow-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs sticky top-0 bg-card z-10">Group</TableHead>
-                      <TableHead className="text-xs sticky top-0 bg-card z-10 font-mono">Depth Δ (%)</TableHead>
-                      <TableHead className="text-xs sticky top-0 bg-card z-10 font-mono">Length Δ</TableHead>
-                      <TableHead className="text-xs sticky top-0 bg-card z-10 font-mono">Width Δ</TableHead>
-                      {hasRates && (
-                        <>
-                          <TableHead className="text-xs sticky top-0 bg-card z-10 font-mono">Depth/yr</TableHead>
-                          <TableHead className="text-xs sticky top-0 bg-card z-10 font-mono">Length/yr</TableHead>
-                        </>
-                      )}
-                      <TableHead className="text-xs sticky top-0 bg-card z-10">Flag</TableHead>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="text-2xs font-mono uppercase sticky top-0 bg-muted/50 z-10 w-24">Type</TableHead>
+                      <TableHead className="text-2xs font-mono uppercase sticky top-0 bg-muted/50 z-10">Feature</TableHead>
+                      <TableHead className="text-2xs font-mono uppercase sticky top-0 bg-muted/50 z-10">Details</TableHead>
+                      <TableHead className="text-2xs font-mono uppercase sticky top-0 bg-muted/50 z-10">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {state.growthResults.map(gr => (
-                      <TableRow key={gr.group_id} className={gr.flag ? 'bg-destructive/5' : ''}>
-                        <TableCell className="text-xs font-mono">{gr.group_id}</TableCell>
-                        <TableCell className={cn('text-xs font-mono', gr.depth_delta != null && gr.depth_delta > 0 ? 'text-destructive' : '')}>
-                          {gr.depth_delta != null ? (gr.depth_delta > 0 ? '+' : '') + gr.depth_delta.toFixed(2) : '—'}
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">
-                          {gr.length_delta != null ? (gr.length_delta > 0 ? '+' : '') + gr.length_delta.toFixed(2) : '—'}
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">
-                          {gr.width_delta != null ? (gr.width_delta > 0 ? '+' : '') + gr.width_delta.toFixed(2) : '—'}
-                        </TableCell>
-                        {hasRates && (
-                          <>
-                            <TableCell className="text-xs font-mono">
-                              {gr.depth_rate != null ? gr.depth_rate.toFixed(3) : '—'}
-                            </TableCell>
-                            <TableCell className="text-xs font-mono">
-                              {gr.length_rate != null ? gr.length_rate.toFixed(3) : '—'}
-                            </TableCell>
-                          </>
-                        )}
+                    {state.exceptions.map((exc, i) => (
+                      <TableRow key={i}>
                         <TableCell>
-                          {gr.flag && (
-                            <Badge variant="destructive" className="text-xs">
-                              <AlertTriangle className="h-3 w-3 mr-1" />
-                              {gr.flag}
-                            </Badge>
-                          )}
+                          <span className={cn('inline-block px-1.5 py-0 text-2xs font-mono', exceptionStyles[exc.type] || '')}>
+                            {exc.type}
+                          </span>
                         </TableCell>
+                        <TableCell className="font-mono-data">{exc.feature.feature_id}</TableCell>
+                        <TableCell className="text-2xs text-muted-foreground max-w-xs truncate">{exc.details}</TableCell>
+                        <TableCell className="text-2xs text-accent">{exc.recommendation}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="exceptions">
-          <div className="space-y-3">
-            {state.exceptions.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">No exceptions found.</p>
-            ) : (
-              state.exceptions.map((exc, i) => {
-                const config = exceptionConfig[exc.type] || exceptionConfig.UNCERTAIN;
-                const { Icon } = config;
-                return (
-                  <Card key={i}>
-                    <CardContent className="flex items-start gap-4 p-4">
-                      <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-accent-foreground', config.color)}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge className={cn('text-xs text-accent-foreground', config.color)}>
-                            {exc.type}
-                          </Badge>
-                          <span className="text-xs font-mono text-muted-foreground">{exc.feature.feature_id}</span>
-                        </div>
-                        <p className="text-sm text-foreground">{exc.details}</p>
-                        <p className="text-xs text-accent mt-1">{exc.recommendation}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
-          </div>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
-
-      <div className="flex justify-end pt-4 border-t">
-        <Button variant="accent" size="lg" onClick={() => dispatch({ type: 'SET_STEP', step: 4 })}>
-          Continue to Export →
-        </Button>
-      </div>
     </div>
   );
 }
 
-function MiniMetric({ label, value, color }: { label: string; value: number; color: string }) {
+function MetricInline({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
-    <Card>
-      <CardContent className="p-3 text-center">
-        <p className={cn('text-2xl font-bold font-mono', color)}>{value}</p>
-        <p className="text-xs text-muted-foreground">{label}</p>
-      </CardContent>
-    </Card>
+    <div className="flex items-baseline gap-1">
+      <span className="text-2xs font-mono uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className={cn('text-xs font-mono font-semibold', color || 'text-foreground')}>{value}</span>
+    </div>
   );
 }
