@@ -1,76 +1,78 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Upload, GitCompare, TrendingUp, Download, Shield, BarChart3 } from 'lucide-react';
-
-const features = [
-  { icon: Upload, title: 'Upload ILI Data', desc: 'Import 2–3 Excel files with automatic column detection and validation.' },
-  { icon: GitCompare, title: 'Align & Match', desc: 'Reference-point alignment with piecewise drift correction and DP-based matching.' },
-  { icon: TrendingUp, title: 'Growth Analysis', desc: 'Compute depth, length, and width deltas with per-year rates when dates available.' },
-  { icon: Shield, title: 'Exception Flagging', desc: 'Identify NEW, MISSING, UNCERTAIN, and RAPID_GROWTH anomalies automatically.' },
-  { icon: BarChart3, title: 'Confidence Scoring', desc: 'Every match has a numeric score with component breakdown and explainability.' },
-  { icon: Download, title: 'Export Results', desc: 'Download matched datasets, drift maps, and exception reports as CSV/XLSX/JSON.' },
-];
+import { GitCompare, ArrowRight, Terminal } from 'lucide-react';
 
 const Index = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-              <GitCompare className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-bold text-foreground">ILI Align Studio</span>
-          </div>
+    <div className="min-h-screen bg-background flex flex-col">
+      <header className="border-b bg-card px-6 h-10 flex items-center shrink-0">
+        <div className="flex items-center gap-2">
+          <GitCompare className="h-3.5 w-3.5 text-accent" />
+          <span className="text-xs font-semibold uppercase tracking-widest text-foreground">ILI Align Studio</span>
         </div>
+        <span className="ml-auto text-2xs text-muted-foreground font-mono">v1.0.0</span>
       </header>
 
-      <section className="container mx-auto px-6 py-20 text-center">
-        <div className="mx-auto max-w-3xl">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-accent/10 px-4 py-1.5 text-sm font-medium text-accent">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            Pipeline Integrity Analysis
+      <main className="flex-1 flex items-center justify-center">
+        <div className="max-w-lg text-center px-6">
+          <div className="inline-flex items-center gap-1.5 border px-2 py-0.5 text-2xs font-mono text-muted-foreground mb-6 uppercase tracking-wider">
+            <Terminal className="h-3 w-3" />
+            Pipeline Integrity Workstation
           </div>
-          <h1 className="mb-6 text-5xl font-extrabold tracking-tight text-foreground">
-            Align · Match · Analyze
+
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground mb-3">
+            ILI Alignment Workspace
           </h1>
-          <p className="mb-10 text-lg text-muted-foreground leading-relaxed">
-            Align multiple ILI runs, match anomalies across inspections, compute growth rates, and flag exceptions — all with full confidence scoring and explainability.
+          <p className="text-sm text-muted-foreground leading-relaxed mb-8">
+            Deterministic inspection alignment and anomaly growth analysis.
+            Upload ILI datasets, align reference points, match anomalies across runs,
+            and compute growth rates with full confidence scoring.
           </p>
-          <div className="flex items-center justify-center gap-4">
-            <Button variant="accent" size="lg" onClick={() => navigate('/analysis')} className="px-8 text-base font-semibold">
-              Create New Analysis
+
+          <div className="flex items-center justify-center gap-3">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => navigate('/analysis')}
+              className="font-mono text-xs uppercase tracking-wider px-6"
+            >
+              Start Alignment
+              <ArrowRight className="h-3 w-3 ml-1.5" />
             </Button>
-            <Button variant="outline" size="lg" onClick={() => navigate('/analysis?example=true')} className="px-8 text-base">
-              Load Example Dataset
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/analysis?example=true')}
+              className="font-mono text-xs uppercase tracking-wider px-6"
+            >
+              Load Example Data
             </Button>
           </div>
-        </div>
-      </section>
 
-      <section className="container mx-auto px-6 pb-20">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {features.map((f) => (
-            <Card key={f.title} className="border bg-card transition-shadow hover:shadow-md">
-              <CardContent className="p-6">
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
-                  <f.icon className="h-5 w-5 text-accent" />
+          <div className="mt-12 border-t pt-6">
+            <div className="grid grid-cols-4 gap-4 text-center">
+              {[
+                { label: 'Align', desc: 'Reference pts' },
+                { label: 'Match', desc: 'DP matching' },
+                { label: 'Growth', desc: 'Rate analysis' },
+                { label: 'Export', desc: 'CSV / XLSX' },
+              ].map((item) => (
+                <div key={item.label}>
+                  <p className="text-xs font-mono font-medium text-foreground">{item.label}</p>
+                  <p className="text-2xs text-muted-foreground mt-0.5">{item.desc}</p>
                 </div>
-                <h3 className="mb-2 font-semibold text-foreground">{f.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
-              </CardContent>
-            </Card>
-          ))}
+              ))}
+            </div>
+          </div>
         </div>
-      </section>
+      </main>
 
-      <footer className="border-t bg-card py-6">
-        <div className="container mx-auto px-6 text-center text-sm text-muted-foreground">
-          ILI Align Studio — Deterministic, reproducible pipeline inspection analysis
-        </div>
+      <footer className="border-t px-6 h-8 flex items-center">
+        <span className="text-2xs text-muted-foreground font-mono">
+          Deterministic · Reproducible · Explainable
+        </span>
       </footer>
     </div>
   );
