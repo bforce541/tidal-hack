@@ -2,95 +2,91 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 215 25% 97%;
+    --foreground: 220 40% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 220 40% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 220 40% 10%;
 
-    --primary: 222.2 47.4% 11.2%;
+    --primary: 218 45% 18%;
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 210 20% 93%;
+    --secondary-foreground: 218 45% 18%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 215 20% 93%;
+    --muted-foreground: 215 15% 46%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 172 50% 38%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
+    --ring: 172 50% 38%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 98%;
+    --sidebar-background: 218 50% 13%;
+    --sidebar-foreground: 210 20% 82%;
+    --sidebar-primary: 172 50% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 218 45% 20%;
+    --sidebar-accent-foreground: 210 20% 92%;
+    --sidebar-border: 218 40% 22%;
+    --sidebar-ring: 172 50% 40%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --confidence-high: 152 60% 40%;
+    --confidence-med: 210 70% 50%;
+    --confidence-low: 38 92% 50%;
+    --confidence-uncertain: 0 72% 51%;
 
-    --sidebar-primary: 240 5.9% 10%;
+    --success: 152 60% 40%;
+    --warning: 38 92% 50%;
+    --info: 210 70% 50%;
 
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --chart-1: 172 50% 38%;
+    --chart-2: 218 45% 35%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 152 60% 40%;
+    --chart-5: 0 72% 51%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
+    --background: 220 30% 8%;
+    --foreground: 210 20% 92%;
+    --card: 220 30% 12%;
+    --card-foreground: 210 20% 92%;
+    --popover: 220 30% 12%;
+    --popover-foreground: 210 20% 92%;
+    --primary: 172 50% 45%;
+    --primary-foreground: 220 30% 8%;
+    --secondary: 218 30% 20%;
+    --secondary-foreground: 210 20% 92%;
+    --muted: 218 25% 18%;
+    --muted-foreground: 215 15% 55%;
+    --accent: 172 50% 38%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 30%;
     --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --border: 218 25% 22%;
+    --input: 218 25% 22%;
+    --ring: 172 50% 40%;
+    --sidebar-background: 220 35% 6%;
+    --sidebar-foreground: 210 20% 82%;
+    --sidebar-primary: 172 50% 45%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 218 30% 15%;
+    --sidebar-accent-foreground: 210 20% 92%;
+    --sidebar-border: 218 25% 18%;
+    --sidebar-ring: 172 50% 40%;
   }
 }
 
@@ -101,5 +97,66 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .font-mono-data {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .step-connector {
+    @apply absolute left-5 top-10 w-0.5 bg-border;
+    height: calc(100% - 0.5rem);
+  }
+
+  .step-connector-active {
+    @apply bg-accent;
+  }
+
+  .confidence-high {
+    color: hsl(var(--confidence-high));
+  }
+  .confidence-med {
+    color: hsl(var(--confidence-med));
+  }
+  .confidence-low {
+    color: hsl(var(--confidence-low));
+  }
+  .confidence-uncertain {
+    color: hsl(var(--confidence-uncertain));
+  }
+
+  .bg-confidence-high {
+    background-color: hsl(var(--confidence-high));
+  }
+  .bg-confidence-med {
+    background-color: hsl(var(--confidence-med));
+  }
+  .bg-confidence-low {
+    background-color: hsl(var(--confidence-low));
+  }
+  .bg-confidence-uncertain {
+    background-color: hsl(var(--confidence-uncertain));
+  }
+
+  .bg-success { background-color: hsl(var(--success)); }
+  .bg-warning { background-color: hsl(var(--warning)); }
+  .bg-info { background-color: hsl(var(--info)); }
+  .text-success { color: hsl(var(--success)); }
+  .text-warning { color: hsl(var(--warning)); }
+  .text-info { color: hsl(var(--info)); }
+
+  .drop-zone {
+    @apply border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer;
+    border-color: hsl(var(--border));
+  }
+  .drop-zone:hover,
+  .drop-zone-active {
+    border-color: hsl(var(--accent));
+    background-color: hsl(var(--accent) / 0.05);
   }
 }
