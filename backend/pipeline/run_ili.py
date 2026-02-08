@@ -28,6 +28,12 @@ from src.schema import (
     load_and_parse_runs,
     write_schema_report,
 )
+from formatting import (
+    format_for_humans,
+    human_columns_for_matches,
+    matches_human_preferred_order,
+    GENERIC_HUMAN_COLUMNS,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -112,11 +118,24 @@ def run_mvp(
         },
     }
 
-    # Write outputs
+    # Write outputs (machine CSVs unchanged; add _human.csv for presentation)
     logger.info("Writing outputs...")
     for name, df in all_tables.items():
         if df is not None and len(df) > 0:
-            df.to_csv(tables_dir / f"{name}.csv", index=False)
+            path = tables_dir / f"{name}.csv"
+            df.to_csv(path, index=False)
+            # Human-readable version
+            base = path.stem
+            if name == f"Matches_{prev_year}_{later_year}":
+                human_df = format_for_humans(
+                    df,
+                    column_map=human_columns_for_matches(prev_year, later_year),
+                    preferred_order=matches_human_preferred_order(prev_year, later_year),
+                )
+            else:
+                generic_map = {k: v for k, v in GENERIC_HUMAN_COLUMNS.items() if k in df.columns}
+                human_df = format_for_humans(df, column_map=generic_map or None)
+            human_df.to_csv(tables_dir / f"{base}_human.csv", index=False)
     with open(tables_dir / "summary.json", "w") as f:
         json.dump(summary, f, indent=2)
 
