@@ -65,6 +65,7 @@ export function AgentDrawer() {
   const lastIntentRef = useRef<'mvp-analyze' | null>(null);
   const lastMvpJobRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const shouldSpeakRef = useRef(false);
@@ -623,12 +624,13 @@ export function AgentDrawer() {
   };
 
   useEffect(() => {
-    if (!scrollRef.current) return;
-    const el = scrollRef.current;
     requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
+      conversationEndRef.current?.scrollIntoView({ block: 'end' });
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
     });
-  }, [messages, isThinking]);
+  }, [messages, isThinking, isSpeaking]);
 
   return (
     <Sheet>
@@ -798,6 +800,7 @@ export function AgentDrawer() {
                   <p>Thinking...</p>
                 </div>
               )}
+              <div ref={conversationEndRef} />
             </div>
           </div>
         </div>
