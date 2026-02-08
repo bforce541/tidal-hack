@@ -52,6 +52,22 @@ export default function Projections() {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-6 pb-6 flex flex-col items-center justify-center gap-4">
+            <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">Loading Future Projections</p>
+            <p className="text-xs text-muted-foreground text-center">
+              Generating 2030 & 2040 projection data…
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card px-4 py-3 flex items-center gap-4">
@@ -64,12 +80,6 @@ export default function Projections() {
         <h1 className="text-lg font-semibold">Future Projections (2030 / 2040)</h1>
       </header>
       <main className="p-6 max-w-4xl mx-auto">
-        {loading && (
-          <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Loading projection data…</span>
-          </div>
-        )}
         {error && (
           <Card className="border-destructive/50">
             <CardContent className="pt-6">
@@ -80,7 +90,7 @@ export default function Projections() {
             </CardContent>
           </Card>
         )}
-        {!loading && !error && points && (
+        {!error && points && (
           <ProjectionsChart points={points.points} years={points.years} />
         )}
       </main>
