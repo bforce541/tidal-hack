@@ -123,6 +123,43 @@ export async function requestProject(body: ProjectRequestBody): Promise<ProjectR
   return res.json();
 }
 
+/** ML projection endpoint (optional path; does not replace /project). */
+export function projectMlUrl(): string {
+  return `${base().replace(/\/$/, "")}/project/ml`;
+}
+
+export interface MlProjectResponse {
+  target_years: number[];
+  ml_predictions: Record<string, number | null>;
+  ml_model: {
+    type: string;
+    features: string[];
+    train_rows: number;
+    metrics?: Record<string, number | null>;
+  };
+  ml_notes: string;
+  /** Per-anomaly depths: { "2030": [{ id, depth }], "2040": [...] } */
+  ml_predictions_by_anomaly?: Record<string, { id: string; depth: number }[]>;
+  /** Summary stats per target year: mean, median, p90, high_risk_count */
+  ml_summary?: Record<
+    string,
+    { mean: number | null; median: number | null; p90: number | null; high_risk_count: number }
+  >;
+}
+
+export async function requestMlProject(body: ProjectRequestBody): Promise<MlProjectResponse> {
+  const res = await fetch(projectMlUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error((err as { detail?: string }).detail || "ML projections failed");
+  }
+  return res.json();
+}
+
 export interface VisualPoint {
   anomaly_id: string;
   year: number;
