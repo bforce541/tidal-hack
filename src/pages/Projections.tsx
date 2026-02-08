@@ -162,6 +162,20 @@ export default function Projections() {
         )}
         {!error && points && (
           <div className="space-y-6">
+            <Card className="border border-border/80 bg-card shadow-sm overflow-hidden">
+              <CardContent className="p-0">
+                <video
+                  src="/future-projections.mp4"
+                  controls
+                  className="w-full aspect-video"
+                  playsInline
+                  preload="metadata"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              </CardContent>
+            </Card>
+
             <ProjectionsChart points={points.points} years={points.years} />
 
             <Card className="border border-border/80 bg-card shadow-sm">
