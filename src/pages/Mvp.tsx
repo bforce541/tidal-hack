@@ -186,6 +186,14 @@ export default function Mvp() {
     return () => window.removeEventListener("mvp:open-projections", handler as EventListener);
   }, [jobId, navigate]);
 
+  // Ensure body scroll is not locked when entering this page (e.g. after Sheet/drawer or client nav)
+  useEffect(() => {
+    document.body.style.overflow = "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, []);
+
   const hasResult = success || successRunAll;
   const step1Active = !file;
   const step2Active = !!file && !hasResult;
@@ -208,7 +216,7 @@ export default function Mvp() {
   };
 
   const content = (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="flex flex-col">
       <header className="border-b bg-card/50 px-6 h-12 flex items-center justify-between shrink-0">
         <Button
           variant="ghost"
@@ -692,7 +700,7 @@ export default function Mvp() {
 
   return (
     <AnalysisProvider>
-      <div className="min-h-screen bg-background flex">
+      <div className="min-h-dvh bg-background flex">
         <aside className="w-72 shrink-0 border-r bg-sidebar text-sidebar-foreground">
           <div className="border-b border-sidebar-border px-4 py-3">
             <p className="text-xs font-mono uppercase tracking-widest text-sidebar-foreground/60">
@@ -703,7 +711,7 @@ export default function Mvp() {
             <AgentDrawer />
           </div>
         </aside>
-        <main className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0 min-h-0">
           {content}
         </main>
       </div>
