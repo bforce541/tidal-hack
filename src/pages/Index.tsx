@@ -79,11 +79,11 @@ const Index = () => {
                   onClick={() => navigate('/mvp')}
                   className="font-mono text-xs uppercase tracking-wider px-6"
                 >
-                  Run Pipeline
+                  Analyze
                   <ArrowRight className="h-3 w-3 ml-1.5" />
                 </Button>
               </div>
-              <span className="text-2xs text-muted-foreground">Upload Excel → run pipeline → download human-readable or machine CSVs</span>
+              <span className="text-2xs text-muted-foreground">Upload Excel → analyze → download results</span>
             </div>
 
             {/* Stats */}
