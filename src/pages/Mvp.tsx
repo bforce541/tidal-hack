@@ -18,22 +18,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   uploadFile,
   runPipeline,
+  runPipelineAll,
   pipelineOutputUrl,
   pipelinePreviewUrl,
+  fetchProjectVisual,
   type PipelineRunResponse,
+  type PipelineRunAllResponse,
+  type VisualPoint,
 } from "@/lib/api";
+import { HistoricalGrowthChart } from "@/components/analysis/HistoricalGrowthChart";
+import { ResultsTab } from "@/components/analysis/ResultsTab";
 import { Loader2, FileDown, ArrowLeft, Upload, ChevronDown } from "lucide-react";
 import { AnalysisProvider } from "@/context/AnalysisContext";
 import { AgentDrawer } from "@/components/analysis/AgentDrawer";
 
-type RunPair = "2007,2015" | "2015,2022";
+type RunPair = "2007,2015" | "2015,2022" | "ALL";
 
 const RUN_OPTIONS: { value: RunPair; label: string }[] = [
   { value: "2007,2015", label: "2007 → 2015" },
   { value: "2015,2022", label: "2015 → 2022" },
+  { value: "ALL", label: "Run all (2007→2015 + 2015→2022)" },
 ];
 
 const PREFERRED_MATCH_COLUMNS = [
@@ -58,15 +66,41 @@ export default function Mvp() {
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [runs, setRuns] = useState<RunPair>("2015,2022");
-  const [debug, setDebug] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PipelineRunResponse | null>(null);
+  const [resultRunAll, setResultRunAll] = useState<PipelineRunAllResponse | null>(null);
+  const [runAllTab, setRunAllTab] = useState("0");
   const [error, setError] = useState<string | null>(null);
   const [previewLimit, setPreviewLimit] = useState(25);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingFuture, setLoadingFuture] = useState(false);
+  const [historicalVisual, setHistoricalVisual] = useState<{
+    points: VisualPoint[];
+    years: number[];
+  } | null>(null);
+  const [historicalVisualLoading, setHistoricalVisualLoading] = useState(false);
 
   const runsList = runs === "2007,2015" ? [2007, 2015] : [2015, 2022];
   const [prevYear, laterYear] = runsList[0] < runsList[1] ? [runsList[0], runsList[1]] : [runsList[1], runsList[0]];
+  const isRunAll = runs === "ALL";
+  const success = result?.status === "ok" && result.outputs && !resultRunAll;
+  const successRunAll = resultRunAll?.status === "ok";
+  const jobId =
+    result?.job_id ??
+    (resultRunAll?.runs?.[1]?.status === "ok" ? resultRunAll.runs[1].job_id : null) ??
+    (resultRunAll?.runs?.[0]?.status === "ok" ? resultRunAll.runs[0].job_id : null) ??
+    null;
+  const matchesRows = result?.preview?.matches_rows ?? [];
+  const summaryText = result?.preview?.summary_text ?? "";
+  const preferredCols = matchesRows.length > 0
+    ? PREFERRED_MATCH_COLUMNS.filter((c) => c in (matchesRows[0] || {}))
+    : [];
+  const columns =
+    preferredCols.length > 0
+      ? preferredCols
+      : matchesRows.length > 0 && matchesRows[0]
+        ? Object.keys(matchesRows[0])
+        : [];
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("mvp:state", {
@@ -80,9 +114,40 @@ export default function Mvp() {
     }));
   }, [file, runs, loading, result]);
 
+  useEffect(() => {
+    if (!resultRunAll?.runs?.length) return;
+    const failed = resultRunAll.runs.findIndex((r) => r.status !== "ok");
+    if (failed === 0) setRunAllTab("0");
+    else if (failed === 1) setRunAllTab("1");
+    else setRunAllTab("0");
+  }, [resultRunAll]);
+
+  useEffect(() => {
+    const jobId = result?.job_id;
+    if (!jobId || !result?.status || result.status !== "ok") {
+      setHistoricalVisual(null);
+      return;
+    }
+    setHistoricalVisualLoading(true);
+    fetchProjectVisual(jobId)
+      .then((res) => {
+        const historicalYears = [prevYear, laterYear];
+        const historicalPoints = res.points.filter((p) =>
+          historicalYears.includes(p.year)
+        );
+        setHistoricalVisual({
+          points: historicalPoints,
+          years: historicalYears,
+        });
+      })
+      .catch(() => setHistoricalVisual(null))
+      .finally(() => setHistoricalVisualLoading(false));
+  }, [result?.job_id, result?.status, prevYear, laterYear]);
+
   const handleRun = useCallback(async () => {
     setError(null);
     setResult(null);
+    setResultRunAll(null);
     setPreviewLimit(25);
     if (!file) {
       setError("Please upload an Excel file.");
@@ -91,24 +156,43 @@ export default function Mvp() {
     setLoading(true);
     try {
       const { storedPath } = await uploadFile(file);
-      const data = await runPipeline({
-        inputPath: storedPath,
-        runs: runsList,
-        debug,
-      });
-      setResult(data);
+      if (isRunAll) {
+        const data = await runPipelineAll({ inputPath: storedPath });
+        setResultRunAll(data);
+      } else {
+        const data = await runPipeline({
+          inputPath: storedPath,
+          runs: runsList,
+        });
+        setResult(data);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed");
     } finally {
       setLoading(false);
     }
-  }, [file, runsList, debug]);
+  }, [file, runsList, isRunAll]);
 
   useEffect(() => {
     const handler = () => void handleRun();
     window.addEventListener("mvp:run", handler as EventListener);
     return () => window.removeEventListener("mvp:run", handler as EventListener);
   }, [handleRun]);
+
+  const handleOpenFutureProjections = useCallback(() => {
+    if (!jobId || loadingFuture) return;
+    setLoadingFuture(true);
+    window.setTimeout(() => {
+      navigate("/mvp/projections", { state: { jobId } });
+      setLoadingFuture(false);
+    }, 3000);
+  }, [jobId, loadingFuture, navigate]);
+
+  useEffect(() => {
+    const handler = () => handleOpenFutureProjections();
+    window.addEventListener("mvp:open-projections", handler as EventListener);
+    return () => window.removeEventListener("mvp:open-projections", handler as EventListener);
+  }, [handleOpenFutureProjections]);
 
   const handleViewMore = async () => {
     if (!result || previewLimit >= 100) return;
@@ -125,19 +209,6 @@ export default function Mvp() {
       setLoadingMore(false);
     }
   };
-
-  const success = result?.status === "ok" && result.outputs;
-  const matchesRows = result?.preview?.matches_rows ?? [];
-  const summaryText = result?.preview?.summary_text ?? "";
-  const preferredCols = matchesRows.length > 0
-    ? PREFERRED_MATCH_COLUMNS.filter((c) => c in (matchesRows[0] || {}))
-    : [];
-  const columns =
-    preferredCols.length > 0
-      ? preferredCols
-      : matchesRows.length > 0 && matchesRows[0]
-        ? Object.keys(matchesRows[0])
-        : [];
 
   const content = (
     <div className="min-h-screen bg-background flex flex-col">
@@ -218,17 +289,6 @@ export default function Mvp() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="debug"
-                checked={debug}
-                onChange={(e) => setDebug(e.target.checked)}
-              />
-              <Label htmlFor="debug" className="text-xs text-muted-foreground">
-                Debug (show traceback on error)
-              </Label>
-            </div>
             <Button
               onClick={handleRun}
               disabled={loading || !file}
@@ -252,6 +312,89 @@ export default function Mvp() {
               <p className="text-sm font-medium text-destructive">{error}</p>
             </CardContent>
           </Card>
+        )}
+
+        {resultRunAll && (
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Run all — 2007→2015 + 2015→2022
+            </h2>
+            <Tabs value={runAllTab} onValueChange={setRunAllTab} className="w-full">
+              <TabsList className="w-full grid grid-cols-3">
+                <TabsTrigger value="0">2007 → 2015</TabsTrigger>
+                <TabsTrigger value="1">2015 → 2022</TabsTrigger>
+                <TabsTrigger value="2">Continued issues</TabsTrigger>
+              </TabsList>
+              <TabsContent value="0" className="mt-4">
+                <ResultsTab
+                  title="2007 → 2015"
+                  subtitle={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.metrics ? "Matched / New / Match rate" : undefined}
+                  status={resultRunAll.runs[0]?.status === "ok" ? "ok" : resultRunAll.runs[0] ? "error" : "pending"}
+                  metrics={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.metrics ? { matched: resultRunAll.runs[0].metrics.matched, new_or_unmatched: resultRunAll.runs[0].metrics.new_or_unmatched, match_rate: resultRunAll.runs[0].metrics.match_rate } : undefined}
+                  downloads={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.outputs ? [{ label: "Download matches CSV", url: resultRunAll.runs[0].outputs.matches_csv, kind: "primary" }, ...(resultRunAll.runs[0].outputs.comparison_csv ? [{ label: "Download comparison CSV", url: resultRunAll.runs[0].outputs.comparison_csv, kind: "secondary" as const }] : []), { label: "Download summary", url: resultRunAll.runs[0].outputs.summary_txt, kind: "secondary" }] : []}
+                  previewTable={(() => {
+                    const rows0 = resultRunAll.runs[0]?.preview?.matches_rows ?? [];
+                    const first0 = rows0[0];
+                    const cols0 = first0 && rows0.length ? (PREFERRED_MATCH_COLUMNS.filter((c) => c in first0).length > 0 ? PREFERRED_MATCH_COLUMNS.filter((c) => c in first0) : Object.keys(first0)) : [];
+                    return { columns: cols0, rows: rows0 };
+                  })()}
+                  previewText={resultRunAll.runs[0]?.preview?.summary_text ?? ""}
+                  errorMessage={resultRunAll.runs[0]?.status !== "ok" ? resultRunAll.runs[0]?.detail : undefined}
+                />
+              </TabsContent>
+              <TabsContent value="1" className="mt-4">
+                <ResultsTab
+                  title="2015 → 2022"
+                  subtitle={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.metrics ? "Matched / New / Match rate" : undefined}
+                  status={resultRunAll.runs[1]?.status === "ok" ? "ok" : resultRunAll.runs[1] ? "error" : "pending"}
+                  metrics={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.metrics ? { matched: resultRunAll.runs[1].metrics.matched, new_or_unmatched: resultRunAll.runs[1].metrics.new_or_unmatched, match_rate: resultRunAll.runs[1].metrics.match_rate } : undefined}
+                  downloads={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.outputs ? [{ label: "Download matches CSV", url: resultRunAll.runs[1].outputs.matches_csv, kind: "primary" }, ...(resultRunAll.runs[1].outputs.comparison_csv ? [{ label: "Download comparison CSV", url: resultRunAll.runs[1].outputs.comparison_csv, kind: "secondary" as const }] : []), { label: "Download summary", url: resultRunAll.runs[1].outputs.summary_txt, kind: "secondary" }] : []}
+                  previewTable={(() => {
+                    const rows1 = resultRunAll.runs[1]?.preview?.matches_rows ?? [];
+                    const first1 = rows1[0];
+                    const cols1 = first1 && rows1.length ? (PREFERRED_MATCH_COLUMNS.filter((c) => c in first1).length > 0 ? PREFERRED_MATCH_COLUMNS.filter((c) => c in first1) : Object.keys(first1)) : [];
+                    return { columns: cols1, rows: rows1 };
+                  })()}
+                  previewText={resultRunAll.runs[1]?.preview?.summary_text ?? ""}
+                  errorMessage={resultRunAll.runs[1]?.status !== "ok" ? resultRunAll.runs[1]?.detail : undefined}
+                />
+              </TabsContent>
+              <TabsContent value="2" className="mt-4">
+                {(() => {
+                  const bothOk = resultRunAll.runs.length >= 2 && resultRunAll.runs.every((r) => r.status === "ok");
+                  const co = resultRunAll.continued_outputs;
+                  const hasContinued = co && (co.continued_txt || co.continued_csv || co.continued_xlsx);
+                  const cp = resultRunAll.continued_preview;
+                  return (
+                    <ResultsTab
+                      title="Continued issues"
+                      subtitle={bothOk && hasContinued ? "Issues tracked across 2007 → 2015 → 2022" : undefined}
+                      status={bothOk && hasContinued ? "ok" : "error"}
+                      metrics={undefined}
+                      downloads={bothOk && co ? [...(co.continued_txt ? [{ label: "Download continued issues (TXT)", url: co.continued_txt, kind: "secondary" as const }] : []), ...(co.continued_csv ? [{ label: "Download continued issues (CSV)", url: co.continued_csv, kind: "primary" as const }] : [])] : []}
+                      previewTable={{ columns: cp?.continued_rows?.[0] ? Object.keys(cp.continued_rows[0]) : [], rows: cp?.continued_rows ?? [] }}
+                      previewText={cp?.continued_text ?? ""}
+                      emptyMessage={!bothOk || !hasContinued ? "Continued issues not available until both runs succeed." : undefined}
+                    />
+                  );
+                })()}
+              </TabsContent>
+            </Tabs>
+            {resultRunAll.runs.some((r) => r.status === "ok") && (
+              <div className="space-y-2 pt-4 border-t border-border/80">
+                <Button
+                  variant="default"
+                  size="lg"
+                  className="gap-2 bg-black hover:bg-black/90 text-white font-medium px-6 py-3"
+                  disabled={!jobId || loadingFuture}
+                  onClick={handleOpenFutureProjections}
+                >
+                  {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  View Future Projections (2030 / 2040)
+                </Button>
+              </div>
+            )}
+          </div>
         )}
 
         {success && result && (
@@ -313,6 +456,31 @@ export default function Mvp() {
               </div>
             </div>
 
+            <section className="space-y-2">
+              <h2 className="text-base font-semibold text-foreground">
+                Growth Between Runs
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Depth % at each inspection ({prevYear} → {laterYear})
+              </p>
+              {historicalVisualLoading ? (
+                <div className="flex items-center gap-2 rounded border border-border/80 bg-white p-8 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading chart…
+                </div>
+              ) : historicalVisual && historicalVisual.points.length > 0 ? (
+                <HistoricalGrowthChart
+                  points={historicalVisual.points}
+                  years={historicalVisual.years}
+                  runLabel={`${prevYear} → ${laterYear}`}
+                />
+              ) : historicalVisual ? (
+                <div className="rounded border border-border/80 bg-white p-8 text-center text-sm text-muted-foreground">
+                  No match data for chart.
+                </div>
+              ) : null}
+            </section>
+
             <Card className="border border-border/80 bg-card shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base font-medium">Matches preview</CardTitle>
@@ -367,6 +535,19 @@ export default function Mvp() {
               </CardContent>
             </Card>
 
+            <div className="space-y-2">
+              <Button
+                variant="default"
+                size="lg"
+                className="gap-2 bg-black hover:bg-black/90 text-white font-medium px-6 py-3"
+                disabled={!jobId || loadingFuture}
+                onClick={handleOpenFutureProjections}
+              >
+                {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                View Future Projections (2030 / 2040)
+              </Button>
+            </div>
+
             <Card className="border border-border/80 bg-card shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base font-medium">Summary preview</CardTitle>
@@ -380,6 +561,19 @@ export default function Mvp() {
           </div>
         )}
       </main>
+      {loadingFuture && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center px-6">
+          <Card className="w-full max-w-md border-white/15 bg-zinc-900 text-white shadow-2xl">
+            <CardContent className="pt-8 pb-8 flex flex-col items-center gap-4">
+              <Loader2 className="h-10 w-10 animate-spin text-cyan-300" />
+              <p className="text-base font-semibold tracking-wide">Future Projections loading</p>
+              <p className="text-xs text-zinc-300 text-center">
+                Preparing future projections and loading visual summaries...
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 
@@ -389,7 +583,7 @@ export default function Mvp() {
         <aside className="w-72 shrink-0 border-r bg-sidebar text-sidebar-foreground">
           <div className="border-b border-sidebar-border px-4 py-3">
             <p className="text-xs font-mono uppercase tracking-widest text-sidebar-foreground/60">
-              Analysis Agent
+              Piper
             </p>
           </div>
           <div className="p-3">

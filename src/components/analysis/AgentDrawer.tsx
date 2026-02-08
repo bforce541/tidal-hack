@@ -65,6 +65,7 @@ export function AgentDrawer() {
   const lastIntentRef = useRef<'mvp-analyze' | null>(null);
   const lastMvpJobRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const shouldSpeakRef = useRef(false);
@@ -208,6 +209,7 @@ export function AgentDrawer() {
     const runAnalytics = /run\s+(the\s+)?analytics|run\s+analysis/;
     const runMvp = /run\s+(the\s+)?mvp/;
     const analyzeFile = /analyze(\s+(the|this|my))?\s+file|analyze\s+it/;
+    const showFuture = /show\s+(me\s+)?(the\s+)?future\s+projections|open\s+(the\s+)?future\s+projections|future\s+projections/;
     if (runAlign.test(q)) {
       runAlignment();
       return 'Running alignment now.';
@@ -226,6 +228,12 @@ export function AgentDrawer() {
       close?.click();
       lastIntentRef.current = 'mvp-analyze';
       return 'Analyzing the file now.';
+    }
+    if (showFuture.test(q)) {
+      window.dispatchEvent(new Event('mvp:open-projections'));
+      const close = document.querySelector<HTMLButtonElement>('[data-agent-close]');
+      close?.click();
+      return 'Opening future projections now.';
     }
     if (runAnalytics.test(q)) {
       if (state.runs.length < 2) return 'Upload at least two runs before running analytics.';
@@ -623,12 +631,13 @@ export function AgentDrawer() {
   };
 
   useEffect(() => {
-    if (!scrollRef.current) return;
-    const el = scrollRef.current;
     requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
+      conversationEndRef.current?.scrollIntoView({ block: 'end' });
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
     });
-  }, [messages, isThinking]);
+  }, [messages, isThinking, isSpeaking]);
 
   return (
     <Sheet>
@@ -640,7 +649,7 @@ export function AgentDrawer() {
       </SheetTrigger>
       <SheetContent side="left" className="w-[1300px] overflow-hidden">
         <SheetHeader>
-          <SheetTitle className="text-sm font-mono uppercase tracking-wider">Analysis Agent</SheetTitle>
+          <SheetTitle className="text-sm font-mono uppercase tracking-wider">Piper</SheetTitle>
         </SheetHeader>
         <SheetClose className="sr-only" data-agent-close>Close</SheetClose>
 
@@ -798,6 +807,7 @@ export function AgentDrawer() {
                   <p>Thinking...</p>
                 </div>
               )}
+              <div ref={conversationEndRef} />
             </div>
           </div>
         </div>
