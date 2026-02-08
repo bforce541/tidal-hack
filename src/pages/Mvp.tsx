@@ -23,8 +23,11 @@ import {
   runPipeline,
   pipelineOutputUrl,
   pipelinePreviewUrl,
+  fetchProjectVisual,
   type PipelineRunResponse,
+  type VisualPoint,
 } from "@/lib/api";
+import { HistoricalGrowthChart } from "@/components/analysis/HistoricalGrowthChart";
 import { Loader2, FileDown, ArrowLeft, Upload, ChevronDown } from "lucide-react";
 import { AnalysisProvider } from "@/context/AnalysisContext";
 import { AgentDrawer } from "@/components/analysis/AgentDrawer";
@@ -64,6 +67,11 @@ export default function Mvp() {
   const [error, setError] = useState<string | null>(null);
   const [previewLimit, setPreviewLimit] = useState(25);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [historicalVisual, setHistoricalVisual] = useState<{
+    points: VisualPoint[];
+    years: number[];
+  } | null>(null);
+  const [historicalVisualLoading, setHistoricalVisualLoading] = useState(false);
 
   const runsList = runs === "2007,2015" ? [2007, 2015] : [2015, 2022];
   const [prevYear, laterYear] = runsList[0] < runsList[1] ? [runsList[0], runsList[1]] : [runsList[1], runsList[0]];
@@ -79,6 +87,28 @@ export default function Mvp() {
       },
     }));
   }, [file, runs, loading, result]);
+
+  useEffect(() => {
+    const jobId = result?.job_id;
+    if (!jobId || !result?.status || result.status !== "ok") {
+      setHistoricalVisual(null);
+      return;
+    }
+    setHistoricalVisualLoading(true);
+    fetchProjectVisual(jobId)
+      .then((res) => {
+        const historicalYears = [prevYear, laterYear];
+        const historicalPoints = res.points.filter((p) =>
+          historicalYears.includes(p.year)
+        );
+        setHistoricalVisual({
+          points: historicalPoints,
+          years: historicalYears,
+        });
+      })
+      .catch(() => setHistoricalVisual(null))
+      .finally(() => setHistoricalVisualLoading(false));
+  }, [result?.job_id, result?.status, prevYear, laterYear]);
 
   const handleRun = useCallback(async () => {
     setError(null);
@@ -127,6 +157,7 @@ export default function Mvp() {
   };
 
   const success = result?.status === "ok" && result.outputs;
+  const jobId = result?.job_id ?? null;
   const matchesRows = result?.preview?.matches_rows ?? [];
   const summaryText = result?.preview?.summary_text ?? "";
   const preferredCols = matchesRows.length > 0
@@ -313,6 +344,31 @@ export default function Mvp() {
               </div>
             </div>
 
+            <section className="space-y-2">
+              <h2 className="text-base font-semibold text-foreground">
+                Growth Between Runs
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Depth % at each inspection ({prevYear} → {laterYear})
+              </p>
+              {historicalVisualLoading ? (
+                <div className="flex items-center gap-2 rounded border border-border/80 bg-white p-8 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading chart…
+                </div>
+              ) : historicalVisual && historicalVisual.points.length > 0 ? (
+                <HistoricalGrowthChart
+                  points={historicalVisual.points}
+                  years={historicalVisual.years}
+                  runLabel={`${prevYear} → ${laterYear}`}
+                />
+              ) : historicalVisual ? (
+                <div className="rounded border border-border/80 bg-white p-8 text-center text-sm text-muted-foreground">
+                  No match data for chart.
+                </div>
+              ) : null}
+            </section>
+
             <Card className="border border-border/80 bg-card shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base font-medium">Matches preview</CardTitle>
@@ -366,6 +422,21 @@ export default function Mvp() {
                 )}
               </CardContent>
             </Card>
+
+            <div className="space-y-2">
+              <Button
+                variant="default"
+                size="lg"
+                className="gap-2 bg-black hover:bg-black/90 text-white font-medium px-6 py-3"
+                disabled={!jobId}
+                onClick={() => navigate("/mvp/projections", { state: { jobId } })}
+              >
+                View Future Projections (2030 / 2040)
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Opens a new page to generate and download 2030 & 2040 projections.
+              </p>
+            </div>
 
             <Card className="border border-border/80 bg-card shadow-sm">
               <CardHeader>
