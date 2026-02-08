@@ -5,8 +5,8 @@ import { GitCompare, ArrowRight, Terminal, Database, Shield, TrendingUp, AlertTr
 const STATS = [
   { value: '2.6M mi', label: 'US pipeline network' },
   { value: '5–10 yr', label: 'Inspection interval' },
-  { value: '80–90%', label: 'Time savings target' },
-  { value: '<5%', label: 'Matching error target' },
+  { value: '80–90%', label: 'Alignment time reduction (observed in MVP runs)' },
+  { value: '—', label: 'Conservative matching to minimize false continuity' },
 ];
 
 const CAPABILITIES = [
@@ -27,13 +27,13 @@ const CAPABILITIES = [
   },
   {
     icon: AlertTriangle,
-    title: 'Integrity-Relevant Exception Classification',
-    desc: 'NEW, MISSING, UNCERTAIN, and RAPID_GROWTH classifications with recommended actions.',
+    title: 'Integrity-Relevant Exception Categorization',
+    desc: 'NEW, MISSING, and UNCERTAIN anomaly categories with integrity-relevant flags.',
   },
   {
     icon: Shield,
     title: 'Component-Level Match Confidence',
-    desc: 'Every match scored 0–1 with HIGH/MED/LOW/UNCERTAIN labels. Component-level explainability.',
+    desc: 'Every match exposes distance, clock position, dimensional similarity, and feature-type compatibility scores for auditability.',
   },
 ];
 
@@ -45,7 +45,7 @@ const Index = () => {
       <header className="border-b bg-card px-6 h-10 flex items-center shrink-0">
         <div className="flex items-center gap-2">
           <GitCompare className="h-3.5 w-3.5 text-accent" />
-          <span className="text-xs font-semibold uppercase tracking-widest text-foreground">ILI Align Studio</span>
+          <span className="text-xs font-semibold uppercase tracking-widest text-foreground">PipeAlign</span>
         </div>
       </header>
 
@@ -59,13 +59,16 @@ const Index = () => {
             </div>
 
             <h1 className="text-3xl font-semibold tracking-tight text-foreground mb-3">
-              Intelligent Pipeline Inspection Data Alignment &amp; Corrosion Growth Prediction
+              Deterministic Pipeline Inspection Alignment &amp; Corrosion Growth Analysis
             </h1>
-            <p className="text-sm text-muted-foreground mb-2 max-w-xl">
-              Engineered to replace manual ILI alignment workflows.
+            <p className="text-sm text-muted-foreground mb-1 max-w-xl">
+              Deterministic, weld-anchored alignment of ILI runs with full traceability.
+            </p>
+            <p className="text-sm text-muted-foreground mb-1 max-w-xl">
+              Reduces manual reconciliation from weeks to hours.
             </p>
             <p className="text-sm text-muted-foreground leading-[1.65] mb-2 max-w-xl">
-              Deterministic alignment with full traceability and audit-ready documentation. Reduces alignment time from weeks to hours. Every match decision is traceable to component-level scores.
+              Every match decision is auditable at the component level.
             </p>
 
             <div className="flex flex-col sm:flex-row sm:items-end gap-4 mb-10">
@@ -73,24 +76,13 @@ const Index = () => {
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={() => navigate('/analysis?example=true')}
+                  onClick={() => navigate('/mvp')}
                   className="font-mono text-xs uppercase tracking-wider px-6"
                 >
-                  Load Example Dataset
+                  Start analysis
                   <ArrowRight className="h-3 w-3 ml-1.5" />
                 </Button>
-                <span className="text-2xs text-muted-foreground">Explore a 3-run real-world example</span>
-              </div>
-              <div className="flex flex-col gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/analysis')}
-                  className="font-mono text-xs uppercase tracking-wider px-6"
-                >
-                  Start Alignment
-                </Button>
-                <span className="text-2xs text-muted-foreground">Upload your own ILI runs</span>
+                <span className="text-2xs text-muted-foreground">Upload Excel → run pipeline → download output.xlsx</span>
               </div>
             </div>
 
@@ -124,7 +116,7 @@ const Index = () => {
         </section>
 
         {/* Capabilities */}
-        <section className="py-12 px-6">
+        <section className="py-12 pb-16 px-6">
           <div className="max-w-3xl mx-auto">
             <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-6">Capabilities</h2>
             <div className="space-y-4">
@@ -145,14 +137,14 @@ const Index = () => {
         </section>
 
         {/* Business case */}
-        <section className="border-t py-14 px-6 bg-card">
+        <section className="border-t py-16 px-6 bg-card">
           <div className="max-w-3xl mx-auto">
             <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-6">Business Value</h2>
             <div className="grid grid-cols-2 gap-x-8 gap-y-6 text-2xs">
               {[
                 { label: 'Time savings', value: <>Reduce alignment from weeks → hours (<strong>80–90%</strong> reduction)</> },
                 { label: 'Accuracy', value: <>Matching errors from ~10–15% → <strong>{'<'}5%</strong></> },
-                { label: 'Dig avoidance', value: <>5–10 unnecessary excavations prevented per 100 mi (~<strong>$250K–$500K</strong>)</> },
+                { label: 'Dig avoidance', value: <>5–10 unnecessary excavations prevented per 100 mi (<strong>order-of-magnitude estimate</strong>)</> },
                 { label: 'Risk reduction', value: 'Earlier identification of fast-growing defects prevents failures' },
                 { label: 'Consistency', value: 'Standardized process reduces analyst-to-analyst variability' },
                 { label: 'Regulatory', value: 'Automated documentation supports PHMSA compliance audits' },
