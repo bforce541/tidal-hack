@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,6 +73,8 @@ export default function Mvp() {
   const [error, setError] = useState<string | null>(null);
   const [previewLimit, setPreviewLimit] = useState(25);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingFutureMl, setLoadingFutureMl] = useState(false);
+  const lastAutoScrolledJobRef = useRef<string | null>(null);
   const [historicalVisual, setHistoricalVisual] = useState<{
     points: VisualPoint[];
     years: number[];
@@ -178,13 +180,20 @@ export default function Mvp() {
     return () => window.removeEventListener("mvp:run", handler as EventListener);
   }, [handleRun]);
 
+  const handleOpenMlPredictions = useCallback(() => {
+    if (!jobId || loadingFutureMl) return;
+    setLoadingFutureMl(true);
+    window.setTimeout(() => {
+      navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } });
+      setLoadingFutureMl(false);
+    }, 3000);
+  }, [jobId, loadingFutureMl, navigate]);
+
   useEffect(() => {
-    const handler = () => {
-      if (jobId) navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } });
-    };
+    const handler = () => handleOpenMlPredictions();
     window.addEventListener("mvp:open-projections", handler as EventListener);
     return () => window.removeEventListener("mvp:open-projections", handler as EventListener);
-  }, [jobId, navigate]);
+  }, [handleOpenMlPredictions]);
 
   // Ensure body scroll is not locked when entering this page (e.g. after Sheet/drawer or client nav)
   useEffect(() => {
@@ -198,6 +207,15 @@ export default function Mvp() {
   const step1Active = !file;
   const step2Active = !!file && !hasResult;
   const step3Active = hasResult;
+
+  useEffect(() => {
+    if (loading || !hasResult || !jobId) return;
+    if (lastAutoScrolledJobRef.current === jobId) return;
+    lastAutoScrolledJobRef.current = jobId;
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    });
+  }, [hasResult, jobId, loading]);
 
   const handleViewMore = async () => {
     if (!result || previewLimit >= 100) return;
@@ -483,9 +501,10 @@ export default function Mvp() {
                         variant="default"
                         size="lg"
                         className="w-full gap-2 bg-black hover:bg-black/90 text-white font-medium py-3"
-                        onClick={() => navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } })}
+                        onClick={handleOpenMlPredictions}
+                        disabled={loadingFutureMl}
                       >
-                        <Sparkles className="h-4 w-4" />
+                        {loadingFutureMl ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                         Show ML Predictions
                       </Button>
                       <p className="text-xs text-muted-foreground text-center">
@@ -640,9 +659,10 @@ export default function Mvp() {
                         variant="default"
                         size="lg"
                         className="w-full gap-2 bg-black hover:bg-black/90 text-white font-medium py-3"
-                        onClick={() => navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } })}
+                        onClick={handleOpenMlPredictions}
+                        disabled={loadingFutureMl}
                       >
-                        <Sparkles className="h-4 w-4" />
+                        {loadingFutureMl ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                         Show ML Predictions
                       </Button>
                       <p className="text-xs text-muted-foreground text-center">
@@ -695,6 +715,16 @@ export default function Mvp() {
           </div>
         </div>
       </main>
+      {loadingFutureMl && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center px-6">
+          <Card className="w-full max-w-md border-white/15 bg-zinc-900 text-white shadow-2xl">
+            <CardContent className="pt-8 pb-8 flex flex-col items-center gap-4">
+              <Loader2 className="h-10 w-10 animate-spin text-cyan-300" />
+              <p className="text-base font-semibold tracking-wide">Loading future ML predictions ⏳</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 

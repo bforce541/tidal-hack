@@ -6,6 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { fetchProjectVisual, pipelineOutputUrl, requestProject, requestMlProject, type MlProjectResponse } from "@/lib/api";
 import { ArrowLeft, Download, Loader2, Sparkles } from "lucide-react";
 import { ProjectionsVideoPlayer } from "@/components/analysis/ProjectionsVideoPlayer";
+import { AnalysisProvider } from "@/context/AnalysisContext";
+import { AgentDrawer } from "@/components/analysis/AgentDrawer";
 
 const DELTA_BIN_RANGES: { label: string; lo: number; hi: number }[] = [
   { label: "< -20", lo: -Infinity, hi: -20 },
@@ -219,8 +221,57 @@ export default function Projections() {
     }
     return bullets.slice(0, 3);
   }, [summaryBaseline, summary2030ForTakeaways, baselineYear]);
+
+  useEffect(() => {
+    const top2030 = projectionRows[0];
+    const year2030Summary = mlPredictions?.ml_summary?.["2030"] ?? null;
+    window.dispatchEvent(new CustomEvent("mvp:state", {
+      detail: {
+        loading: loading || mlLoading,
+        result: points ? { status: "ok" } : null,
+        projections: {
+          hasData: Boolean(points),
+          jobId,
+          years: points?.years ?? [],
+          count2030: projectionRows.length,
+          count2040: 0,
+          top2030: top2030 ? {
+            anomaly_id: top2030.anomaly_id,
+            depth: top2030.depth,
+            growth_rate: top2030.growth_rate,
+            flags: top2030.flags,
+          } : null,
+          top2040: null,
+          mlLoaded: Boolean(mlPredictions),
+          mlMean2030: year2030Summary?.mean ?? null,
+          mlMedian2030: year2030Summary?.median ?? null,
+          mlP90_2030: year2030Summary?.p90 ?? null,
+          mlHighRisk2030: year2030Summary?.high_risk_count ?? null,
+          keyTakeaways,
+        },
+      },
+    }));
+  }, [jobId, keyTakeaways, loading, mlLoading, mlPredictions, points, projectionRows]);
+
+  const withAgentLayout = (content: JSX.Element) => (
+    <AnalysisProvider>
+      <div className="min-h-screen bg-background flex">
+        <aside className="w-72 shrink-0 border-r bg-sidebar text-sidebar-foreground">
+          <div className="border-b border-sidebar-border px-4 py-3">
+            <p className="text-xs font-mono uppercase tracking-widest text-sidebar-foreground/60">
+              Piper
+            </p>
+          </div>
+          <div className="p-3">
+            <AgentDrawer />
+          </div>
+        </aside>
+        <main className="flex-1 min-w-0">{content}</main>
+      </div>
+    </AnalysisProvider>
+  );
   if (!jobId) {
-    return (
+    return withAgentLayout(
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
         <Card className="max-w-md w-full">
           <CardHeader>
@@ -243,7 +294,7 @@ export default function Projections() {
   }
 
   if (loading) {
-    return (
+    return withAgentLayout(
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
         <Card className="max-w-md w-full">
           <CardContent className="pt-6 pb-6 flex flex-col items-center justify-center gap-4">
@@ -258,7 +309,7 @@ export default function Projections() {
     );
   }
 
-  return (
+  return withAgentLayout(
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card px-4 py-3 flex items-center gap-4">
         <Button variant="ghost" size="sm" asChild className="gap-1">
