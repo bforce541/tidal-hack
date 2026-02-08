@@ -1,10 +1,11 @@
 """
-Future projections: linear extrapolation from matched anomalies only.
-Deterministic, no ML. Uses historical growth rate to project depth to target years.
+Future projections from matched anomalies only.
+Deterministic, no ML. Uses bounded exponential growth fitted from historical depths.
 """
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 
@@ -38,6 +39,77 @@ def _growth_rate_per_year(row: pd.Series) -> float | None:
     return (float(later_d) - float(prev_d)) / years
 
 
+def _logistic_k_from_row(row: pd.Series) -> float | None:
+    """
+    Fit k in bounded growth model:
+      depth(t) = 100 - (100 - d0) * exp(-k * t)
+    using two observed points (prev_year, later_year).
+    """
+    prev_y = row.get(COL_PREV_YEAR)
+    later_y = row.get(COL_LATER_YEAR)
+    prev_d = row.get(COL_PREV_DEPTH)
+    later_d = row.get(COL_LATER_DEPTH)
+    if pd.isna(prev_y) or pd.isna(later_y) or pd.isna(prev_d) or pd.isna(later_d):
+        return None
+    dt = int(later_y) - int(prev_y)
+    if dt <= 0:
+        return None
+    d0 = float(prev_d)
+    d1 = float(later_d)
+    d0 = max(0.0, min(99.999, d0))
+    d1 = max(0.0, min(99.999, d1))
+    # For corrosion depth projection, do not learn negative growth.
+    if d1 <= d0:
+        return 0.0
+    rem0 = 100.0 - d0
+    rem1 = 100.0 - d1
+    if rem0 <= 0 or rem1 <= 0:
+        return None
+    ratio = rem1 / rem0
+    if ratio <= 0:
+        return None
+    return -math.log(ratio) / dt
+
+
+def _bounded_logistic_k(
+    k: float | None,
+    k_valid: pd.Series,
+) -> tuple[float | None, bool]:
+    """
+    Bound fitted k to robust historical limits.
+    Returns (bounded_k, was_capped).
+    """
+    if k is None:
+        return None, False
+    if len(k_valid) == 0:
+        bounded = max(0.0, float(k))
+        return bounded, bounded != float(k)
+
+    lo = float(k_valid.quantile(0.05))
+    hi = float(k_valid.quantile(0.95))
+    bounded = float(k)
+    bounded = max(lo, min(hi, bounded))
+    bounded = max(0.0, bounded)
+    return bounded, bounded != float(k)
+
+
+def _project_depth_realistic(
+    depth_current: float,
+    bounded_k: float | None,
+    years_ahead: int,
+) -> float:
+    """
+    Project depth with bounded exponential saturation:
+      depth(t) = 100 - (100 - depth_current) * exp(-k * t)
+    """
+    if years_ahead <= 0 or bounded_k is None:
+        return depth_current
+    rem = max(0.001, 100.0 - depth_current)
+    projected = 100.0 - (rem * math.exp(-bounded_k * years_ahead))
+    # Depth is bounded physically between 0 and 100%.
+    return max(0.0, min(100.0, projected))
+
+
 def compute_projections(
     matches_df: pd.DataFrame,
     base_year: int,
@@ -55,6 +127,8 @@ def compute_projections(
 
     growth_rates = matches_df.apply(_growth_rate_per_year, axis=1)
     rates_valid = growth_rates.dropna()
+    k_values = matches_df.apply(_logistic_k_from_row, axis=1)
+    k_valid = k_values.dropna()
     p90 = float(rates_valid.quantile(0.9)) if len(rates_valid) > 0 else 0.0
 
     result = {}
@@ -62,6 +136,7 @@ def compute_projections(
         rows = []
         for _, row in matches_df.iterrows():
             gr = _growth_rate_per_year(row)
+            k = _logistic_k_from_row(row)
             depth_curr = row.get(COL_LATER_DEPTH)
             later_y = row.get(COL_LATER_YEAR)
             if pd.isna(depth_curr) or pd.isna(later_y):
@@ -69,18 +144,20 @@ def compute_projections(
             depth_curr_f = float(depth_curr)
             later_y_int = int(later_y)
             years_ahead = target_year - later_y_int
-            if gr is not None:
-                projected = depth_curr_f + gr * years_ahead
-            else:
-                projected = depth_curr_f
-            projected = max(0.0, min(100.0, projected))
+            bounded_k, was_capped = _bounded_logistic_k(k, k_valid)
+            projected = _project_depth_realistic(depth_curr_f, bounded_k, years_ahead)
+            modeled_rate = None
+            if bounded_k is not None:
+                modeled_rate = bounded_k * max(0.0, 100.0 - depth_curr_f)
 
             flags = []
-            if gr is not None:
-                if gr < 0:
+            if modeled_rate is not None:
+                if modeled_rate < 0:
                     flags.append("negative_growth")
-                if high_growth_p90 and gr is not None and len(rates_valid) > 0 and gr > p90:
+                if high_growth_p90 and len(rates_valid) > 0 and modeled_rate > p90:
                     flags.append("high_growth")
+                if was_capped:
+                    flags.append("model_capped")
             confidence_flag = ";".join(flags) if flags else ""
             notes = ""
             if gr is None:
@@ -92,7 +169,7 @@ def compute_projections(
                 "aligned_distance_m": row.get(COL_DISTANCE),
                 "depth_prev": row.get(COL_PREV_DEPTH),
                 "depth_curr": depth_curr_f,
-                "growth_rate_per_year": gr,
+                "growth_rate_per_year": modeled_rate,
                 "projected_depth": round(projected, 2),
                 "confidence_flag": confidence_flag,
                 "notes": notes,
@@ -140,10 +217,14 @@ def build_visual_series(
         return []
     growth_rates = matches_df.apply(_growth_rate_per_year, axis=1)
     rates_valid = growth_rates.dropna()
+    k_values = matches_df.apply(_logistic_k_from_row, axis=1)
+    k_valid = k_values.dropna()
     p90 = float(rates_valid.quantile(0.9)) if len(rates_valid) > 0 else 0.0
     out = []
     for _, row in matches_df.iterrows():
         gr = _growth_rate_per_year(row)
+        k = _logistic_k_from_row(row)
+        bounded_k, was_capped = _bounded_logistic_k(k, k_valid)
         depth_prev = row.get(COL_PREV_DEPTH)
         depth_curr = row.get(COL_LATER_DEPTH)
         if pd.isna(depth_curr):
@@ -152,12 +233,17 @@ def build_visual_series(
         depth_prev_f = float(depth_prev) if pd.notna(depth_prev) else depth_curr_f
         later_y_int = int(row.get(COL_LATER_YEAR))
         anomaly_id = str(int(row.get(COL_LATER_IDX, 0)))
+        modeled_rate = None
+        if bounded_k is not None:
+            modeled_rate = bounded_k * max(0.0, 100.0 - depth_curr_f)
         flags = []
-        if gr is not None:
-            if gr < 0:
+        if modeled_rate is not None:
+            if modeled_rate < 0:
                 flags.append("negative_growth")
-            if len(rates_valid) > 0 and gr > p90:
+            if len(rates_valid) > 0 and modeled_rate > p90:
                 flags.append("high_growth")
+            if was_capped:
+                flags.append("model_capped")
         cf = (row.get("confidence_flag") or "")
         if cf:
             flags.extend(s.strip() for s in str(cf).split(";") if s.strip())
@@ -167,29 +253,25 @@ def build_visual_series(
             "anomaly_id": anomaly_id,
             "year": prev_year,
             "depth": round(float(depth_prev_f), 2),
-            "growth_rate": round(gr, 4) if gr is not None else None,
+            "growth_rate": round(modeled_rate, 4) if modeled_rate is not None else None,
             "flags": flags,
         })
         out.append({
             "anomaly_id": anomaly_id,
             "year": later_y_int,
             "depth": round(depth_curr_f, 2),
-            "growth_rate": round(gr, 4) if gr is not None else None,
+            "growth_rate": round(modeled_rate, 4) if modeled_rate is not None else None,
             "flags": flags,
         })
         # Projected points
         for ty in target_years:
             years_ahead = ty - later_y_int
-            if gr is not None:
-                proj = depth_curr_f + gr * years_ahead
-            else:
-                proj = depth_curr_f
-            proj = max(0.0, min(100.0, proj))
+            proj = _project_depth_realistic(depth_curr_f, bounded_k, years_ahead)
             out.append({
                 "anomaly_id": anomaly_id,
                 "year": ty,
                 "depth": round(proj, 2),
-                "growth_rate": round(gr, 4) if gr is not None else None,
+                "growth_rate": round(modeled_rate, 4) if modeled_rate is not None else None,
                 "flags": flags,
             })
     return out
