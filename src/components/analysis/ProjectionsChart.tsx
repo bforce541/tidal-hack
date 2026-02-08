@@ -81,6 +81,10 @@ export function ProjectionsChart({ points, years }: ProjectionsChartProps) {
     <div className="space-y-6">
       {/* Trajectory: median only */}
       <div className="rounded border border-border/80 bg-white p-4 animate-in fade-in duration-300">
+        <h3 className="text-sm font-semibold text-foreground mb-1">Projected average depth over time</h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Historical points are shown for context; future points extend the trend for planning.
+        </p>
         <div className="h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
@@ -92,6 +96,7 @@ export function ProjectionsChart({ points, years }: ProjectionsChartProps) {
                 tick={{ fontSize: 11, fill: AXIS_STROKE }}
                 axisLine={{ stroke: AXIS_STROKE }}
                 tickLine={{ stroke: AXIS_STROKE }}
+                label={{ value: "Year", position: "insideBottom", offset: -4, style: { fontSize: 10, fill: AXIS_STROKE } }}
               />
               <YAxis
                 domain={[0, "auto"]}
@@ -127,6 +132,9 @@ export function ProjectionsChart({ points, years }: ProjectionsChartProps) {
       {/* Histogram: one toggle */}
       {histogramData.length > 0 && (
         <div className="rounded border border-border/80 bg-white p-4">
+          <p className="text-xs text-muted-foreground mb-2">
+            Shows how projected depths are distributed across anomalies in the selected year.
+          </p>
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">
               Risk distribution (projected depth)
@@ -169,7 +177,7 @@ export function ProjectionsChart({ points, years }: ProjectionsChartProps) {
             </ResponsiveContainer>
           </div>
           <p className="mt-2 text-2xs text-muted-foreground">
-            Median: {medianDepth.toFixed(0)}% · High-risk: ≥{HIGH_RISK_DEPTH}%
+            <span className="font-medium">Median</span>: {medianDepth.toFixed(0)}% (dashed line) · <span className="font-medium">High-risk</span>: ≥{HIGH_RISK_DEPTH}% (red bars)
           </p>
         </div>
       )}

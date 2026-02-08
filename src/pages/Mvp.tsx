@@ -32,7 +32,7 @@ import {
 } from "@/lib/api";
 import { HistoricalGrowthChart } from "@/components/analysis/HistoricalGrowthChart";
 import { ResultsTab } from "@/components/analysis/ResultsTab";
-import { Loader2, FileDown, ArrowLeft, Upload, ChevronDown } from "lucide-react";
+import { Loader2, FileDown, ArrowLeft, Upload, ChevronDown, Sparkles } from "lucide-react";
 import { AnalysisProvider } from "@/context/AnalysisContext";
 import { AgentDrawer } from "@/components/analysis/AgentDrawer";
 
@@ -73,7 +73,6 @@ export default function Mvp() {
   const [error, setError] = useState<string | null>(null);
   const [previewLimit, setPreviewLimit] = useState(25);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [loadingFuture, setLoadingFuture] = useState(false);
   const [historicalVisual, setHistoricalVisual] = useState<{
     points: VisualPoint[];
     years: number[];
@@ -178,21 +177,6 @@ export default function Mvp() {
     window.addEventListener("mvp:run", handler as EventListener);
     return () => window.removeEventListener("mvp:run", handler as EventListener);
   }, [handleRun]);
-
-  const handleOpenFutureProjections = useCallback(() => {
-    if (!jobId || loadingFuture) return;
-    setLoadingFuture(true);
-    window.setTimeout(() => {
-      navigate("/mvp/projections", { state: { jobId } });
-      setLoadingFuture(false);
-    }, 3000);
-  }, [jobId, loadingFuture, navigate]);
-
-  useEffect(() => {
-    const handler = () => handleOpenFutureProjections();
-    window.addEventListener("mvp:open-projections", handler as EventListener);
-    return () => window.removeEventListener("mvp:open-projections", handler as EventListener);
-  }, [handleOpenFutureProjections]);
 
   const handleViewMore = async () => {
     if (!result || previewLimit >= 100) return;
@@ -331,7 +315,7 @@ export default function Mvp() {
                   subtitle={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.metrics ? "Matched / New / Match rate" : undefined}
                   status={resultRunAll.runs[0]?.status === "ok" ? "ok" : resultRunAll.runs[0] ? "error" : "pending"}
                   metrics={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.metrics ? { matched: resultRunAll.runs[0].metrics.matched, new_or_unmatched: resultRunAll.runs[0].metrics.new_or_unmatched, match_rate: resultRunAll.runs[0].metrics.match_rate } : undefined}
-                  downloads={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.outputs ? [{ label: "Download matches CSV", url: resultRunAll.runs[0].outputs.matches_csv, kind: "primary" }, ...(resultRunAll.runs[0].outputs.comparison_csv ? [{ label: "Download comparison CSV", url: resultRunAll.runs[0].outputs.comparison_csv, kind: "secondary" as const }] : []), { label: "Download summary", url: resultRunAll.runs[0].outputs.summary_txt, kind: "secondary" }] : []}
+                  downloads={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.outputs ? [{ label: "Download matches CSV", url: resultRunAll.runs[0].outputs.matches_csv, kind: "primary" }, ...(resultRunAll.runs[0].outputs.comparison_csv ? [{ label: "Download comparison CSV", url: resultRunAll.runs[0].outputs.comparison_csv, kind: "secondary" as const }] : []), { label: "Download Full Summary", url: resultRunAll.runs[0].outputs.summary_txt, kind: "secondary" }] : []}
                   previewTable={(() => {
                     const rows0 = resultRunAll.runs[0]?.preview?.matches_rows ?? [];
                     const first0 = rows0[0];
@@ -348,7 +332,7 @@ export default function Mvp() {
                   subtitle={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.metrics ? "Matched / New / Match rate" : undefined}
                   status={resultRunAll.runs[1]?.status === "ok" ? "ok" : resultRunAll.runs[1] ? "error" : "pending"}
                   metrics={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.metrics ? { matched: resultRunAll.runs[1].metrics.matched, new_or_unmatched: resultRunAll.runs[1].metrics.new_or_unmatched, match_rate: resultRunAll.runs[1].metrics.match_rate } : undefined}
-                  downloads={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.outputs ? [{ label: "Download matches CSV", url: resultRunAll.runs[1].outputs.matches_csv, kind: "primary" }, ...(resultRunAll.runs[1].outputs.comparison_csv ? [{ label: "Download comparison CSV", url: resultRunAll.runs[1].outputs.comparison_csv, kind: "secondary" as const }] : []), { label: "Download summary", url: resultRunAll.runs[1].outputs.summary_txt, kind: "secondary" }] : []}
+                  downloads={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.outputs ? [{ label: "Download matches CSV", url: resultRunAll.runs[1].outputs.matches_csv, kind: "primary" }, ...(resultRunAll.runs[1].outputs.comparison_csv ? [{ label: "Download comparison CSV", url: resultRunAll.runs[1].outputs.comparison_csv, kind: "secondary" as const }] : []), { label: "Download Full Summary", url: resultRunAll.runs[1].outputs.summary_txt, kind: "secondary" }] : []}
                   previewTable={(() => {
                     const rows1 = resultRunAll.runs[1]?.preview?.matches_rows ?? [];
                     const first1 = rows1[0];
@@ -380,23 +364,24 @@ export default function Mvp() {
                 })()}
               </TabsContent>
             </Tabs>
-            {resultRunAll.runs.some((r) => r.status === "ok") && (
-              <div className="space-y-2 pt-4 border-t border-border/80">
+            {resultRunAll.runs.some((r) => r.status === "ok") && jobId && (
+              <div className="pt-6 border-t border-border/80 space-y-2">
                 <Button
                   variant="default"
                   size="lg"
-                  className="gap-2 bg-black hover:bg-black/90 text-white font-medium px-6 py-3"
-                  disabled={!jobId || loadingFuture}
-                  onClick={handleOpenFutureProjections}
+                  className="w-full gap-2 bg-black hover:bg-black/90 text-white font-medium py-3"
+                  onClick={() => navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } })}
                 >
-                  {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  View Future Projections (2030 / 2040)
+                  <Sparkles className="h-4 w-4" />
+                  Show ML Predictions
                 </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  Opens the 2030 planning view with projected anomaly depth.
+                </p>
               </div>
             )}
           </div>
         )}
-
         {success && result && (
           <div className="space-y-6">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -430,7 +415,7 @@ export default function Mvp() {
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Downloads
               </h2>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3 items-center">
                 <a
                   href={pipelineOutputUrl(result.outputs.matches_csv)}
                   download={`matches_${prevYear}_${laterYear}.csv`}
@@ -442,17 +427,27 @@ export default function Mvp() {
                     Download Matches
                   </Button>
                 </a>
-                <a
-                  href={pipelineOutputUrl(result.outputs.summary_txt)}
-                  download={`summary_${prevYear}_${laterYear}.txt`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <FileDown className="h-3.5 w-3.5" />
-                    Download Summary
-                  </Button>
-                </a>
+                {result.outputs.summary_txt ? (
+                  <a
+                    href={pipelineOutputUrl(result.outputs.summary_txt)}
+                    download={`summary_${prevYear}_${laterYear}.txt`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <FileDown className="h-3.5 w-3.5" />
+                      Download Full Summary
+                    </Button>
+                  </a>
+                ) : (
+                  <>
+                    <Button variant="outline" size="sm" className="gap-2" disabled>
+                      <FileDown className="h-3.5 w-3.5" />
+                      Download Full Summary
+                    </Button>
+                    <span className="text-xs text-muted-foreground">Summary not available for this run.</span>
+                  </>
+                )}
               </div>
             </div>
 
@@ -535,45 +530,55 @@ export default function Mvp() {
               </CardContent>
             </Card>
 
-            <div className="space-y-2">
-              <Button
-                variant="default"
-                size="lg"
-                className="gap-2 bg-black hover:bg-black/90 text-white font-medium px-6 py-3"
-                disabled={!jobId || loadingFuture}
-                onClick={handleOpenFutureProjections}
-              >
-                {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                View Future Projections (2030 / 2040)
-              </Button>
-            </div>
-
             <Card className="border border-border/80 bg-card shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base font-medium">Summary preview</CardTitle>
+                <CardTitle className="text-base font-medium">Quick Summary</CardTitle>
               </CardHeader>
               <CardContent>
-                <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-words overflow-auto max-h-[240px] rounded-md border border-border/80 p-3 bg-muted/20">
-                  {summaryText || "No summary."}
-                </pre>
+                <ul className="list-disc list-inside space-y-1.5 text-sm text-muted-foreground">
+                  <li>
+                    Compared {prevYear} → {laterYear} inspection runs and matched anomalies across runs.
+                  </li>
+                  <li>
+                    Found {(result.metrics.matched ?? 0) + (result.metrics.new_or_unmatched ?? 0)} anomalies in {laterYear}; matched {result.metrics.matched ?? "(not available)"} to {prevYear} (match rate {result.metrics.match_rate != null ? `${result.metrics.match_rate}%` : "(not available)"}).
+                  </li>
+                  <li>
+                    Identified {result.metrics.new_or_unmatched ?? "(not available)"} anomalies that appear new in {laterYear}.
+                  </li>
+                  {(() => {
+                    const medianMatch = summaryText && /median\s+offset[^\d]*([\d.]+)\s*m/i.exec(summaryText);
+                    if (medianMatch?.[1]) {
+                      return (
+                        <li>
+                          Alignment quality check: median offset ~ {medianMatch[1]} m.
+                        </li>
+                      );
+                    }
+                    return null;
+                  })()}
+                </ul>
               </CardContent>
             </Card>
+
+            {jobId && (
+              <div className="space-y-2 pt-2">
+                <Button
+                  variant="default"
+                  size="lg"
+                  className="w-full gap-2 bg-black hover:bg-black/90 text-white font-medium py-3"
+                  onClick={() => navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } })}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Show ML Predictions
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  Opens the 2030 planning view with projected anomaly depth.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </main>
-      {loadingFuture && (
-        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center px-6">
-          <Card className="w-full max-w-md border-white/15 bg-zinc-900 text-white shadow-2xl">
-            <CardContent className="pt-8 pb-8 flex flex-col items-center gap-4">
-              <Loader2 className="h-10 w-10 animate-spin text-cyan-300" />
-              <p className="text-base font-semibold tracking-wide">Future Projections loading</p>
-              <p className="text-xs text-zinc-300 text-center">
-                Preparing future projections and loading visual summaries...
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 
