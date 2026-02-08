@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchProjectVisual, pipelineOutputUrl, requestProject, requestMlProject, type MlProjectResponse } from "@/lib/api";
 import { ArrowLeft, Download, Loader2, Sparkles } from "lucide-react";
+import { ProjectionsVideoPlayer } from "@/components/analysis/ProjectionsVideoPlayer";
 
 const DELTA_BIN_RANGES: { label: string; lo: number; hi: number }[] = [
   { label: "< -20", lo: -Infinity, hi: -20 },
@@ -76,6 +77,8 @@ export default function Projections() {
   const [mlLoading, setMlLoading] = useState(false);
   const [mlError, setMlError] = useState<string | null>(null);
   const autoLoadMlDoneRef = useRef(false);
+  const [videoOpen, setVideoOpen] = useState(false);
+  const [videoSessionKey, setVideoSessionKey] = useState(0);
 
   useEffect(() => {
     if (!jobId) {
@@ -108,6 +111,11 @@ export default function Projections() {
       .catch((err) => setMlError(err instanceof Error ? err.message : "2030 projections could not be loaded"))
       .finally(() => setMlLoading(false));
   }, [jobId, location.state]);
+
+  useEffect(() => {
+    // Reset the video UI when predictions load/refresh.
+    setVideoOpen(false);
+  }, [mlPredictions]);
 
   const handleShowMlPredictions = () => {
     if (!jobId || mlLoading) return;
@@ -318,23 +326,59 @@ export default function Projections() {
             {mlPredictions && (
               <Card className="border border-border/80 bg-muted/30">
                 <CardHeader>
-                  <CardTitle className="text-base font-medium flex items-center gap-2">
-                    <Sparkles className="h-4 w-4" />
-                    2030 Projection
-                  </CardTitle>
+                  <div className="flex items-center gap-3">
+                    <CardTitle className="text-base font-medium flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" />
+                      2030 Projection
+                    </CardTitle>
+                    <div className="ml-auto">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={[
+                          "font-mono tracking-wide",
+                          "hover:animate-pulse motion-reduce:hover:animate-none",
+                          // Custom "VIEW" pill color (from reference).
+                          "bg-[#5d6b78] text-white",
+                          "hover:bg-[#54626f]",
+                          "border border-transparent",
+                          "shadow-sm",
+                          "data-[state=open]:bg-[#54626f]",
+                        ].join(" ")}
+                        onClick={() => {
+                          setVideoOpen((o) => {
+                            const next = !o;
+                            if (next) setVideoSessionKey((k) => k + 1);
+                            return next;
+                          });
+                        }}
+                      >
+                        {videoOpen ? "HIDE" : "VIEW"}
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="rounded-md border border-border/80 overflow-hidden">
-                    <video
+                  {videoOpen ? (
+                    <ProjectionsVideoPlayer
+                      key={videoSessionKey}
                       src="/future-projections.mp4"
-                      controls
-                      className="w-full aspect-video"
-                      playsInline
-                      preload="metadata"
-                    >
-                      Your browser does not support the video tag.
-                    </video>
-                  </div>
+                      trimEndSeconds={2.24}
+                      yearJumps={[
+                        { year: 2007, seconds: 0.7 },
+                        { year: 2015, seconds: 2.7 },
+                        { year: 2022, seconds: 4.7 },
+                        { year: 2030, seconds: 6.7 },
+                      ]}
+                      autoPreview
+                    />
+                  ) : (
+                    <div className="rounded-md border border-border/80 bg-background p-3">
+                      <p className="text-sm text-muted-foreground">
+                        Click <span className="font-mono">VIEW</span> to open the projection timeline video.
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-md border bg-background p-3 max-w-xs">
                     <p className="text-xs text-muted-foreground uppercase tracking-wider">Mean depth (2030)</p>
                     <p className="text-xl font-mono font-semibold">
