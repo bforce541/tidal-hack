@@ -84,7 +84,7 @@ export default function Mvp() {
       });
       setResult(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Pipeline failed");
+      setError(e instanceof Error ? e.message : "Analysis failed");
     } finally {
       setLoading(false);
     }
@@ -140,10 +140,10 @@ export default function Mvp() {
       <main className="flex-1 max-w-4xl mx-auto w-full py-8 px-6 space-y-8">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Run Pipeline
+            Analyze
           </h1>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Upload your ILI Excel file, choose run years, then run the pipeline. Download matches (CSV) and summary (plain text).
+            Upload your ILI Excel file, choose run years, then analyze. Download matches (CSV) and summary (plain text).
           </p>
         </div>
 
@@ -217,10 +217,10 @@ export default function Mvp() {
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Running pipeline…
+                  Analyzing…
                 </>
               ) : (
-                "Run Pipeline"
+                "Analyze"
               )}
             </Button>
           </CardContent>
