@@ -238,7 +238,7 @@ export function AgentDrawer() {
     const runAnalytics = /run\s+(the\s+)?analytics|run\s+analysis/;
     const runMvp = /run\s+(the\s+)?mvp/;
     const analyzeFile = /analyze(\s+(the|this|my))?\s+file|analyze\s+it/;
-    const showFuture = /show\s+(me\s+)?(the\s+)?future\s+projections|open\s+(the\s+)?future\s+projections|future\s+projections/;
+    const showFuture = /(show|open|go\s+to)\s+(me\s+)?(the\s+)?((future\s+projections?)|(ml\s+predictions?)|(machine\s+learning\s+predictions?))|((future\s+projections?)|(ml\s+predictions?)|(machine\s+learning\s+predictions?))/;
     if (runAlign.test(q)) {
       runAlignment();
       return 'Running alignment now.';
@@ -262,7 +262,7 @@ export function AgentDrawer() {
       window.dispatchEvent(new Event('mvp:open-projections'));
       const close = document.querySelector<HTMLButtonElement>('[data-agent-close]');
       close?.click();
-      return 'Opening future projections now.';
+      return 'Opening ML predictions now.';
     }
     if (runAnalytics.test(q)) {
       if (state.runs.length < 2) return 'Upload at least two runs before running analytics.';
