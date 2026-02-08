@@ -22,3 +22,17 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Backend
+backend/venv/
+__pycache__/
+*.pyc
+venv/
+
+# Backend outputs (Excel, CSVs, reports — never commit)
+backend/jobs/
+backend/pipeline/output/
+backend/pipeline/data/
+backend/**/*.xlsx
+backend/**/*.xls
+backend/**/tables/
