@@ -195,11 +195,21 @@ export default function Mvp() {
     return () => window.removeEventListener("mvp:open-projections", handler as EventListener);
   }, [handleOpenMlPredictions]);
 
-  // Ensure body scroll is not locked when entering this page (e.g. after Sheet/drawer or client nav)
+  // Stabilize height/scroll: clear scroll lock (incl. Radix/Sheet) and nudge Recharts after client-side nav
   useEffect(() => {
-    document.body.style.overflow = "";
-    return () => {
+    const clearScrollLock = () => {
       document.body.style.overflow = "";
+      document.body.classList.remove("overflow-hidden");
+      document.documentElement.classList.remove("overflow-hidden");
+      document.body.removeAttribute("data-scroll-locked");
+    };
+    clearScrollLock();
+    const t = requestAnimationFrame(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    return () => {
+      clearScrollLock();
+      cancelAnimationFrame(t);
     };
   }, []);
 
@@ -252,6 +262,187 @@ export default function Mvp() {
       </header>
 
       <main className="flex-1 w-full py-6 px-6 bg-gray-50">
+        {hasResult ? (
+          /* Step 3 — Simple single-column results (demo-stable fallback) */
+          <div className="bg-white">
+            <div className="mx-auto max-w-5xl px-6 py-6 space-y-6">
+              <h2 className="text-lg font-semibold text-foreground">Analysis Results</h2>
+              {resultRunAll && (
+                <>
+                  <Tabs value={runAllTab} onValueChange={setRunAllTab} className="w-full">
+                    <TabsList className="w-full grid grid-cols-3">
+                      <TabsTrigger value="0">2007 → 2015</TabsTrigger>
+                      <TabsTrigger value="1">2015 → 2022</TabsTrigger>
+                      <TabsTrigger value="2">Continued issues</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="0" className="mt-4">
+                      <ResultsTab
+                        title="2007 → 2015"
+                        subtitle={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.metrics ? "Matched / New / Match rate" : undefined}
+                        status={resultRunAll.runs[0]?.status === "ok" ? "ok" : resultRunAll.runs[0] ? "error" : "pending"}
+                        metrics={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.metrics ? { matched: resultRunAll.runs[0].metrics.matched, new_or_unmatched: resultRunAll.runs[0].metrics.new_or_unmatched, match_rate: resultRunAll.runs[0].metrics.match_rate } : undefined}
+                        downloads={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.outputs ? [{ label: "Download matches CSV", url: resultRunAll.runs[0].outputs.matches_csv, kind: "primary" }, ...(resultRunAll.runs[0].outputs.comparison_csv ? [{ label: "Download comparison CSV", url: resultRunAll.runs[0].outputs.comparison_csv, kind: "secondary" as const }] : []), { label: "Download Full Summary", url: resultRunAll.runs[0].outputs.summary_txt, kind: "secondary" }] : []}
+                        previewTable={(() => {
+                          const rows0 = resultRunAll.runs[0]?.preview?.matches_rows ?? [];
+                          const first0 = rows0[0];
+                          const cols0 = first0 && rows0.length ? (PREFERRED_MATCH_COLUMNS.filter((c) => c in first0).length > 0 ? PREFERRED_MATCH_COLUMNS.filter((c) => c in first0) : Object.keys(first0)) : [];
+                          return { columns: cols0, rows: rows0 };
+                        })()}
+                        previewText={resultRunAll.runs[0]?.preview?.summary_text ?? ""}
+                        errorMessage={resultRunAll.runs[0]?.status !== "ok" ? resultRunAll.runs[0]?.detail : undefined}
+                      />
+                    </TabsContent>
+                    <TabsContent value="1" className="mt-4">
+                      <ResultsTab
+                        title="2015 → 2022"
+                        subtitle={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.metrics ? "Matched / New / Match rate" : undefined}
+                        status={resultRunAll.runs[1]?.status === "ok" ? "ok" : resultRunAll.runs[1] ? "error" : "pending"}
+                        metrics={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.metrics ? { matched: resultRunAll.runs[1].metrics.matched, new_or_unmatched: resultRunAll.runs[1].metrics.new_or_unmatched, match_rate: resultRunAll.runs[1].metrics.match_rate } : undefined}
+                        downloads={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.outputs ? [{ label: "Download matches CSV", url: resultRunAll.runs[1].outputs.matches_csv, kind: "primary" }, ...(resultRunAll.runs[1].outputs.comparison_csv ? [{ label: "Download comparison CSV", url: resultRunAll.runs[1].outputs.comparison_csv, kind: "secondary" as const }] : []), { label: "Download Full Summary", url: resultRunAll.runs[1].outputs.summary_txt, kind: "secondary" }] : []}
+                        previewTable={(() => {
+                          const rows1 = resultRunAll.runs[1]?.preview?.matches_rows ?? [];
+                          const first1 = rows1[0];
+                          const cols1 = first1 && rows1.length ? (PREFERRED_MATCH_COLUMNS.filter((c) => c in first1).length > 0 ? PREFERRED_MATCH_COLUMNS.filter((c) => c in first1) : Object.keys(first1)) : [];
+                          return { columns: cols1, rows: rows1 };
+                        })()}
+                        previewText={resultRunAll.runs[1]?.preview?.summary_text ?? ""}
+                        errorMessage={resultRunAll.runs[1]?.status !== "ok" ? resultRunAll.runs[1]?.detail : undefined}
+                      />
+                    </TabsContent>
+                    <TabsContent value="2" className="mt-4">
+                      {(() => {
+                        const bothOk = resultRunAll.runs.length >= 2 && resultRunAll.runs.every((r) => r.status === "ok");
+                        const co = resultRunAll.continued_outputs;
+                        const hasContinued = co && (co.continued_txt || co.continued_csv || co.continued_xlsx);
+                        const cp = resultRunAll.continued_preview;
+                        return (
+                          <ResultsTab
+                            title="Continued issues"
+                            subtitle={bothOk && hasContinued ? "Issues tracked across 2007 → 2015 → 2022" : undefined}
+                            status={bothOk && hasContinued ? "ok" : "error"}
+                            metrics={undefined}
+                            downloads={bothOk && co ? [...(co.continued_txt ? [{ label: "Download continued issues (TXT)", url: co.continued_txt, kind: "secondary" as const }] : []), ...(co.continued_csv ? [{ label: "Download continued issues (CSV)", url: co.continued_csv, kind: "primary" as const }] : [])] : []}
+                            previewTable={{ columns: cp?.continued_rows?.[0] ? Object.keys(cp.continued_rows[0]) : [], rows: cp?.continued_rows ?? [] }}
+                            previewText={cp?.continued_text ?? ""}
+                            emptyMessage={!bothOk || !hasContinued ? "Continued issues not available until both runs succeed." : undefined}
+                          />
+                        );
+                      })()}
+                    </TabsContent>
+                  </Tabs>
+                  {resultRunAll.runs.some((r) => r.status === "ok") && jobId && (
+                    <Button
+                      variant="default"
+                      size="lg"
+                      className="w-full gap-2 bg-black hover:bg-black/90 text-white font-medium py-3"
+                      onClick={() => navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } })}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      Show ML Predictions
+                    </Button>
+                  )}
+                </>
+              )}
+              {success && result && (
+                <>
+                  <section className="space-y-2">
+                    {historicalVisualLoading ? (
+                      <div className="h-[240px] flex items-center gap-2 rounded border border-gray-200 bg-white p-8 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading chart…
+                      </div>
+                    ) : historicalVisual && historicalVisual.points.length > 0 ? (
+                      <HistoricalGrowthChart
+                        points={historicalVisual.points}
+                        years={historicalVisual.years}
+                        runLabel={`${prevYear} → ${laterYear}`}
+                      />
+                    ) : historicalVisual ? (
+                      <div className="h-[240px] rounded border border-gray-200 bg-white p-8 text-center text-sm text-muted-foreground flex items-center justify-center">
+                        No match data for chart.
+                      </div>
+                    ) : null}
+                  </section>
+                  <Card className="border border-gray-200 bg-white shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-base font-medium">Matches preview</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {matchesRows.length > 0 ? (
+                        <>
+                          <div className="overflow-x-auto overflow-y-auto max-h-[320px] rounded-md border border-gray-200">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="sticky top-0 z-10 bg-muted/80 backdrop-blur border-b">
+                                  {columns.map((col) => (
+                                    <TableHead key={col} className="whitespace-nowrap font-mono text-xs text-left">
+                                      {col}
+                                    </TableHead>
+                                  ))}
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {matchesRows.map((row, i) => (
+                                  <TableRow key={i}>
+                                    {columns.map((col) => (
+                                      <TableCell key={col} className="font-mono text-xs whitespace-nowrap">
+                                        {formatCell(row[col])}
+                                      </TableCell>
+                                    ))}
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          {previewLimit < 100 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="mt-2 gap-1 text-muted-foreground"
+                              onClick={handleViewMore}
+                              disabled={loadingMore}
+                            >
+                              {loadingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                              View more (up to 100 rows)
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-sm text-muted-foreground py-4">No matches to preview.</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="border border-gray-200 bg-white shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-base font-medium">Quick Summary</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="list-disc list-inside space-y-1.5 text-sm text-gray-600">
+                        <li>Compared {prevYear} → {laterYear} inspection runs and matched anomalies across runs.</li>
+                        <li>Found {(result.metrics.matched ?? 0) + (result.metrics.new_or_unmatched ?? 0)} anomalies in {laterYear}; matched {result.metrics.matched ?? "(not available)"} to {prevYear} (match rate {result.metrics.match_rate != null ? `${result.metrics.match_rate}%` : "(not available)"}).</li>
+                        <li>Identified {result.metrics.new_or_unmatched ?? "(not available)"} anomalies that appear new in {laterYear}.</li>
+                        {summaryText && /median\s+offset[^\d]*([\d.]+)\s*m/i.exec(summaryText)?.[1] && (
+                          <li>Alignment quality check: median offset ~ {/median\s+offset[^\d]*([\d.]+)\s*m/i.exec(summaryText)![1]} m.</li>
+                        )}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                  {jobId && (
+                    <Button
+                      variant="default"
+                      size="lg"
+                      className="w-full gap-2 bg-black hover:bg-black/90 text-white font-medium py-3"
+                      onClick={() => navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } })}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      Show ML Predictions
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
         <div className="max-w-6xl mx-auto">
           {/* Section 1 — Page header */}
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-6">
@@ -429,249 +620,6 @@ export default function Mvp() {
                   </CardContent>
                 </Card>
               )}
-
-              {resultRunAll && (
-                <div className="space-y-4">
-                  <h2 className="text-lg font-semibold text-foreground">Results</h2>
-                  <p className="text-sm text-gray-600">Run all — 2007→2015 + 2015→2022. Preview and downloads per run below.</p>
-                  <Tabs value={runAllTab} onValueChange={setRunAllTab} className="w-full">
-                    <TabsList className="w-full grid grid-cols-3">
-                      <TabsTrigger value="0">2007 → 2015</TabsTrigger>
-                      <TabsTrigger value="1">2015 → 2022</TabsTrigger>
-                      <TabsTrigger value="2">Continued issues</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="0" className="mt-4">
-                      <ResultsTab
-                        title="2007 → 2015"
-                        subtitle={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.metrics ? "Matched / New / Match rate" : undefined}
-                        status={resultRunAll.runs[0]?.status === "ok" ? "ok" : resultRunAll.runs[0] ? "error" : "pending"}
-                        metrics={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.metrics ? { matched: resultRunAll.runs[0].metrics.matched, new_or_unmatched: resultRunAll.runs[0].metrics.new_or_unmatched, match_rate: resultRunAll.runs[0].metrics.match_rate } : undefined}
-                        downloads={resultRunAll.runs[0]?.status === "ok" && resultRunAll.runs[0]?.outputs ? [{ label: "Download matches CSV", url: resultRunAll.runs[0].outputs.matches_csv, kind: "primary" }, ...(resultRunAll.runs[0].outputs.comparison_csv ? [{ label: "Download comparison CSV", url: resultRunAll.runs[0].outputs.comparison_csv, kind: "secondary" as const }] : []), { label: "Download Full Summary", url: resultRunAll.runs[0].outputs.summary_txt, kind: "secondary" }] : []}
-                        previewTable={(() => {
-                          const rows0 = resultRunAll.runs[0]?.preview?.matches_rows ?? [];
-                          const first0 = rows0[0];
-                          const cols0 = first0 && rows0.length ? (PREFERRED_MATCH_COLUMNS.filter((c) => c in first0).length > 0 ? PREFERRED_MATCH_COLUMNS.filter((c) => c in first0) : Object.keys(first0)) : [];
-                          return { columns: cols0, rows: rows0 };
-                        })()}
-                        previewText={resultRunAll.runs[0]?.preview?.summary_text ?? ""}
-                        errorMessage={resultRunAll.runs[0]?.status !== "ok" ? resultRunAll.runs[0]?.detail : undefined}
-                      />
-                    </TabsContent>
-                    <TabsContent value="1" className="mt-4">
-                      <ResultsTab
-                        title="2015 → 2022"
-                        subtitle={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.metrics ? "Matched / New / Match rate" : undefined}
-                        status={resultRunAll.runs[1]?.status === "ok" ? "ok" : resultRunAll.runs[1] ? "error" : "pending"}
-                        metrics={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.metrics ? { matched: resultRunAll.runs[1].metrics.matched, new_or_unmatched: resultRunAll.runs[1].metrics.new_or_unmatched, match_rate: resultRunAll.runs[1].metrics.match_rate } : undefined}
-                        downloads={resultRunAll.runs[1]?.status === "ok" && resultRunAll.runs[1]?.outputs ? [{ label: "Download matches CSV", url: resultRunAll.runs[1].outputs.matches_csv, kind: "primary" }, ...(resultRunAll.runs[1].outputs.comparison_csv ? [{ label: "Download comparison CSV", url: resultRunAll.runs[1].outputs.comparison_csv, kind: "secondary" as const }] : []), { label: "Download Full Summary", url: resultRunAll.runs[1].outputs.summary_txt, kind: "secondary" }] : []}
-                        previewTable={(() => {
-                          const rows1 = resultRunAll.runs[1]?.preview?.matches_rows ?? [];
-                          const first1 = rows1[0];
-                          const cols1 = first1 && rows1.length ? (PREFERRED_MATCH_COLUMNS.filter((c) => c in first1).length > 0 ? PREFERRED_MATCH_COLUMNS.filter((c) => c in first1) : Object.keys(first1)) : [];
-                          return { columns: cols1, rows: rows1 };
-                        })()}
-                        previewText={resultRunAll.runs[1]?.preview?.summary_text ?? ""}
-                        errorMessage={resultRunAll.runs[1]?.status !== "ok" ? resultRunAll.runs[1]?.detail : undefined}
-                      />
-                    </TabsContent>
-                    <TabsContent value="2" className="mt-4">
-                      {(() => {
-                        const bothOk = resultRunAll.runs.length >= 2 && resultRunAll.runs.every((r) => r.status === "ok");
-                        const co = resultRunAll.continued_outputs;
-                        const hasContinued = co && (co.continued_txt || co.continued_csv || co.continued_xlsx);
-                        const cp = resultRunAll.continued_preview;
-                        return (
-                          <ResultsTab
-                            title="Continued issues"
-                            subtitle={bothOk && hasContinued ? "Issues tracked across 2007 → 2015 → 2022" : undefined}
-                            status={bothOk && hasContinued ? "ok" : "error"}
-                            metrics={undefined}
-                            downloads={bothOk && co ? [...(co.continued_txt ? [{ label: "Download continued issues (TXT)", url: co.continued_txt, kind: "secondary" as const }] : []), ...(co.continued_csv ? [{ label: "Download continued issues (CSV)", url: co.continued_csv, kind: "primary" as const }] : [])] : []}
-                            previewTable={{ columns: cp?.continued_rows?.[0] ? Object.keys(cp.continued_rows[0]) : [], rows: cp?.continued_rows ?? [] }}
-                            previewText={cp?.continued_text ?? ""}
-                            emptyMessage={!bothOk || !hasContinued ? "Continued issues not available until both runs succeed." : undefined}
-                          />
-                        );
-                      })()}
-                    </TabsContent>
-                  </Tabs>
-                  {resultRunAll.runs.some((r) => r.status === "ok") && jobId && (
-                    <div className="pt-6 border-t border-gray-200 space-y-2">
-                      <Button
-                        variant="default"
-                        size="lg"
-                        className="w-full gap-2 bg-black hover:bg-black/90 text-white font-medium py-3"
-                        onClick={handleOpenMlPredictions}
-                        disabled={loadingFutureMl}
-                      >
-                        {loadingFutureMl ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                        Show ML Predictions
-                      </Button>
-                      <p className="text-xs text-muted-foreground text-center">
-                        Opens the 2030 planning view with projected anomaly depth.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-              {success && result && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-lg font-semibold text-foreground">Results</h2>
-                    <p className="text-sm text-gray-600 mt-0.5">Preview of matched anomalies and a short summary of what was found.</p>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                    {[
-                      { label: "Matched", value: result.metrics.matched },
-                      { label: "New / unmatched", value: result.metrics.new_or_unmatched },
-                      { label: "Missing", value: result.metrics.missing },
-                      { label: "Ambiguous", value: result.metrics.ambiguous },
-                      { label: "Match rate", value: `${result.metrics.match_rate}%` },
-                    ].map(({ label, value }) => (
-                      <Card
-                        key={label}
-                        className="border border-gray-200 bg-white shadow-sm overflow-hidden"
-                      >
-                        <CardContent className="p-4">
-                          <p className="text-2xl font-semibold tabular-nums text-foreground">
-                            {value}
-                          </p>
-                          <p className="text-xs uppercase tracking-wider text-muted-foreground mt-0.5">
-                            {label}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-
-                  <section className="space-y-2">
-                    <h3 className="text-base font-semibold text-foreground">
-                      Median Depth Trend
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      Individual anomaly growth varies significantly; see matches table for details.
-                    </p>
-                    {historicalVisualLoading ? (
-                      <div className="flex items-center gap-2 rounded border border-gray-200 bg-white p-8 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Loading chart…
-                      </div>
-                    ) : historicalVisual && historicalVisual.points.length > 0 ? (
-                      <HistoricalGrowthChart
-                        points={historicalVisual.points}
-                        years={historicalVisual.years}
-                        runLabel={`${prevYear} → ${laterYear}`}
-                      />
-                    ) : historicalVisual ? (
-                      <div className="rounded border border-gray-200 bg-white p-8 text-center text-sm text-muted-foreground">
-                        No match data for chart.
-                      </div>
-                    ) : null}
-                  </section>
-
-                  <Card className="border border-gray-200 bg-white shadow-sm">
-                    <CardHeader>
-                      <CardTitle className="text-lg font-semibold">Matches preview</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {matchesRows.length > 0 ? (
-                        <>
-                          <div className="overflow-x-auto overflow-y-auto max-h-[320px] rounded-md border border-gray-200">
-                            <Table>
-                              <TableHeader>
-                                <TableRow className="sticky top-0 z-10 bg-muted/80 backdrop-blur border-b">
-                                  {columns.map((col) => (
-                                    <TableHead key={col} className="whitespace-nowrap font-mono text-xs text-left">
-                                      {col}
-                                    </TableHead>
-                                  ))}
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {matchesRows.map((row, i) => (
-                                  <TableRow key={i}>
-                                    {columns.map((col) => (
-                                      <TableCell key={col} className="font-mono text-xs whitespace-nowrap">
-                                        {formatCell(row[col])}
-                                      </TableCell>
-                                    ))}
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                          {previewLimit < 100 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="mt-2 gap-1 text-muted-foreground"
-                              onClick={handleViewMore}
-                              disabled={loadingMore}
-                            >
-                              {loadingMore ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <ChevronDown className="h-3.5 w-3.5" />
-                              )}
-                              View more (up to 100 rows)
-                            </Button>
-                          )}
-                        </>
-                      ) : (
-                        <p className="text-sm text-muted-foreground py-4">No matches to preview.</p>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border border-gray-200 bg-white shadow-sm">
-                    <CardHeader>
-                      <CardTitle className="text-lg font-semibold">Quick Summary</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ul className="list-disc list-inside space-y-1.5 text-sm text-gray-600">
-                        <li>
-                          Compared {prevYear} → {laterYear} inspection runs and matched anomalies across runs.
-                        </li>
-                        <li>
-                          Found {(result.metrics.matched ?? 0) + (result.metrics.new_or_unmatched ?? 0)} anomalies in {laterYear}; matched {result.metrics.matched ?? "(not available)"} to {prevYear} (match rate {result.metrics.match_rate != null ? `${result.metrics.match_rate}%` : "(not available)"}).
-                        </li>
-                        <li>
-                          Identified {result.metrics.new_or_unmatched ?? "(not available)"} anomalies that appear new in {laterYear}.
-                        </li>
-                        {(() => {
-                          const medianMatch = summaryText && /median\s+offset[^\d]*([\d.]+)\s*m/i.exec(summaryText);
-                          if (medianMatch?.[1]) {
-                            return (
-                              <li>
-                                Alignment quality check: median offset ~ {medianMatch[1]} m.
-                              </li>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </ul>
-                    </CardContent>
-                  </Card>
-
-                  {jobId && (
-                    <div className="space-y-2 pt-2">
-                      <Button
-                        variant="default"
-                        size="lg"
-                        className="w-full gap-2 bg-black hover:bg-black/90 text-white font-medium py-3"
-                        onClick={handleOpenMlPredictions}
-                        disabled={loadingFutureMl}
-                      >
-                        {loadingFutureMl ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                        Show ML Predictions
-                      </Button>
-                      <p className="text-xs text-muted-foreground text-center">
-                        Opens the 2030 planning view with projected anomaly depth.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Section 5 — Side panel */}
@@ -714,6 +662,7 @@ export default function Mvp() {
             </aside>
           </div>
         </div>
+        )}
       </main>
       {loadingFutureMl && (
         <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center px-6">
