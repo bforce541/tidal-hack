@@ -52,13 +52,16 @@ def run_mvp(
 
     logger.info("Loading and parsing...")
     parsed, schema_report = load_and_parse_runs(input_path, run_years)
-    if len(parsed) != 2:
-        logger.error(f"Could not parse both runs {run_years}")
-        return 1
 
     tables_dir = output_dir / "tables"
     tables_dir.mkdir(parents=True, exist_ok=True)
     write_schema_report(schema_report, tables_dir / "schema_report.json")
+
+    if len(parsed) != 2:
+        msg = schema_report.get("parse_failure_message") or f"Could not parse both runs {run_years}"
+        logger.error(msg)
+        print(msg, file=sys.stderr)
+        return 1
 
     logger.info("Normalizing...")
     normalized = normalize_all(parsed, schema_report)
