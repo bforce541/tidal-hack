@@ -458,7 +458,7 @@ export default function Mvp() {
 
             <section className="space-y-2">
               <h2 className="text-base font-semibold text-foreground">
-                Median Depth Trend (Context Only)
+                Median Depth Trend
               </h2>
               <p className="text-sm text-muted-foreground">
                 Individual anomaly growth varies significantly; see matches table for details.
