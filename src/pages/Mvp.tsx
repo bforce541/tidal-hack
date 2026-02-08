@@ -392,9 +392,6 @@ export default function Mvp() {
                   {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   View Future Projections (2030 / 2040)
                 </Button>
-                <p className="text-xs text-muted-foreground">
-                  Opens a new page to generate and download 2030 & 2040 projections.
-                </p>
               </div>
             )}
           </div>
@@ -549,9 +546,6 @@ export default function Mvp() {
                 {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 View Future Projections (2030 / 2040)
               </Button>
-              <p className="text-xs text-muted-foreground">
-                Opens a new page to generate and download 2030 & 2040 projections.
-              </p>
             </div>
 
             <Card className="border border-border/80 bg-card shadow-sm">
@@ -589,7 +583,7 @@ export default function Mvp() {
         <aside className="w-72 shrink-0 border-r bg-sidebar text-sidebar-foreground">
           <div className="border-b border-sidebar-border px-4 py-3">
             <p className="text-xs font-mono uppercase tracking-widest text-sidebar-foreground/60">
-              Analysis Agent
+              Piper
             </p>
           </div>
           <div className="p-3">
