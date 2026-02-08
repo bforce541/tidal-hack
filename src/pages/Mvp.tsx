@@ -73,7 +73,8 @@ export default function Mvp() {
   const [error, setError] = useState<string | null>(null);
   const [previewLimit, setPreviewLimit] = useState(25);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [loadingFutureMl, setLoadingFutureMl] = useState(false);
+  const [isMlLoadingScreen, setIsMlLoadingScreen] = useState(false);
+  const mlLoadingTimeoutRef = useRef<number | null>(null);
   const lastAutoScrolledJobRef = useRef<string | null>(null);
   const [historicalVisual, setHistoricalVisual] = useState<{
     points: VisualPoint[];
@@ -181,13 +182,20 @@ export default function Mvp() {
   }, [handleRun]);
 
   const handleOpenMlPredictions = useCallback(() => {
-    if (!jobId || loadingFutureMl) return;
-    setLoadingFutureMl(true);
-    window.setTimeout(() => {
+    if (!jobId || isMlLoadingScreen) return;
+    setIsMlLoadingScreen(true);
+    mlLoadingTimeoutRef.current = window.setTimeout(() => {
+      mlLoadingTimeoutRef.current = null;
+      setIsMlLoadingScreen(false);
       navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } });
-      setLoadingFutureMl(false);
     }, 3000);
-  }, [jobId, loadingFutureMl, navigate]);
+  }, [jobId, isMlLoadingScreen, navigate]);
+
+  useEffect(() => {
+    return () => {
+      if (mlLoadingTimeoutRef.current) clearTimeout(mlLoadingTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const handler = () => handleOpenMlPredictions();
@@ -266,7 +274,58 @@ export default function Mvp() {
           /* Step 3 — Simple single-column results (demo-stable fallback) */
           <div className="bg-white">
             <div className="mx-auto max-w-5xl px-6 py-6 space-y-6">
-              <h2 className="text-lg font-semibold text-foreground">Analysis Results</h2>
+              {isMlLoadingScreen ? (
+                <div className="flex flex-col items-center justify-center min-h-[320px] w-full py-12">
+                  <Card className="w-full max-w-md border border-gray-200 bg-gray-50/80 shadow-sm">
+                    <CardContent className="pt-10 pb-10 flex flex-col items-center justify-center gap-4 text-center">
+                      <Loader2 className="h-10 w-10 animate-spin text-primary" aria-hidden />
+                      <div className="space-y-2">
+                        <h2 className="text-xl font-semibold text-foreground">
+                          Loading ML Predictions 🤖✨
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                          Analyzing historical patterns and preparing future projections…
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <>
+              {(() => {
+                const activeResult = success && result ? result : (successRunAll && resultRunAll?.runs?.find((r) => r.status === "ok")) ?? null;
+                const matchesUrl = activeResult?.outputs?.matches_csv;
+                const summaryUrl = activeResult?.outputs?.summary_txt;
+                return (
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <h2 className="text-xl font-semibold text-foreground">Analysis Results</h2>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <a
+                        href={matchesUrl ? pipelineOutputUrl(matchesUrl) : "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={!matchesUrl ? "pointer-events-none" : ""}
+                      >
+                        <Button variant="outline" size="sm" className="gap-1.5" disabled={!matchesUrl}>
+                          <FileDown className="h-3.5 w-3.5" />
+                          Download matches (CSV)
+                        </Button>
+                      </a>
+                      <a
+                        href={summaryUrl ? pipelineOutputUrl(summaryUrl) : "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={!summaryUrl ? "pointer-events-none" : ""}
+                      >
+                        <Button variant="outline" size="sm" className="gap-1.5" disabled={!summaryUrl}>
+                          <FileDown className="h-3.5 w-3.5" />
+                          Download full summary
+                        </Button>
+                      </a>
+                    </div>
+                  </div>
+                );
+              })()}
               {resultRunAll && (
                 <>
                   <Tabs value={runAllTab} onValueChange={setRunAllTab} className="w-full">
@@ -335,9 +394,10 @@ export default function Mvp() {
                       variant="default"
                       size="lg"
                       className="w-full gap-2 bg-black hover:bg-black/90 text-white font-medium py-3"
-                      onClick={() => navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } })}
+                      onClick={handleOpenMlPredictions}
+                      disabled={isMlLoadingScreen}
                     >
-                      <Sparkles className="h-4 w-4" />
+                      {isMlLoadingScreen ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                       Show ML Predictions
                     </Button>
                   )}
@@ -432,12 +492,15 @@ export default function Mvp() {
                       variant="default"
                       size="lg"
                       className="w-full gap-2 bg-black hover:bg-black/90 text-white font-medium py-3"
-                      onClick={() => navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } })}
+                      onClick={handleOpenMlPredictions}
+                      disabled={isMlLoadingScreen}
                     >
-                      <Sparkles className="h-4 w-4" />
+                      {isMlLoadingScreen ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                       Show ML Predictions
                     </Button>
                   )}
+                </>
+              )}
                 </>
               )}
             </div>
@@ -664,16 +727,6 @@ export default function Mvp() {
         </div>
         )}
       </main>
-      {loadingFutureMl && (
-        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center px-6">
-          <Card className="w-full max-w-md border-white/15 bg-zinc-900 text-white shadow-2xl">
-            <CardContent className="pt-8 pb-8 flex flex-col items-center gap-4">
-              <Loader2 className="h-10 w-10 animate-spin text-cyan-300" />
-              <p className="text-base font-semibold tracking-wide">Loading future ML predictions ⏳</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 
