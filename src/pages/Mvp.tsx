@@ -67,6 +67,7 @@ export default function Mvp() {
   const [error, setError] = useState<string | null>(null);
   const [previewLimit, setPreviewLimit] = useState(25);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingFuture, setLoadingFuture] = useState(false);
   const [historicalVisual, setHistoricalVisual] = useState<{
     points: VisualPoint[];
     years: number[];
@@ -154,6 +155,15 @@ export default function Mvp() {
     } finally {
       setLoadingMore(false);
     }
+  };
+
+  const handleOpenFutureProjections = () => {
+    if (!jobId || loadingFuture) return;
+    setLoadingFuture(true);
+    window.setTimeout(() => {
+      navigate("/mvp/projections", { state: { jobId } });
+      setLoadingFuture(false);
+    }, 3000);
   };
 
   const success = result?.status === "ok" && result.outputs;
@@ -428,9 +438,10 @@ export default function Mvp() {
                 variant="default"
                 size="lg"
                 className="gap-2 bg-black hover:bg-black/90 text-white font-medium px-6 py-3"
-                disabled={!jobId}
-                onClick={() => navigate("/mvp/projections", { state: { jobId } })}
+                disabled={!jobId || loadingFuture}
+                onClick={handleOpenFutureProjections}
               >
+                {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 View Future Projections (2030 / 2040)
               </Button>
               <p className="text-xs text-muted-foreground">
@@ -451,6 +462,19 @@ export default function Mvp() {
           </div>
         )}
       </main>
+      {loadingFuture && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center px-6">
+          <Card className="w-full max-w-md border-white/15 bg-zinc-900 text-white shadow-2xl">
+            <CardContent className="pt-8 pb-8 flex flex-col items-center gap-4">
+              <Loader2 className="h-10 w-10 animate-spin text-cyan-300" />
+              <p className="text-base font-semibold tracking-wide">Future predecitions loading</p>
+              <p className="text-xs text-zinc-300 text-center">
+                Preparing future projections and loading visual summaries...
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 
