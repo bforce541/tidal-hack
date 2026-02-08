@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, MessageSquare, Mic, MicOff, Sparkles } from 'lucide-react';
 import { useAnalysis } from '@/context/AnalysisContext';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 
 const STEPS = ['Upload', 'Alignment', 'Matching', 'Growth', 'Export'];
@@ -13,6 +13,36 @@ type Message = {
   content: string;
   status?: 'pending' | 'error' | 'done';
   attempts?: number;
+};
+
+type MvpState = {
+  hasFile?: boolean;
+  runs?: string;
+  loading?: boolean;
+  result?: {
+    status?: string;
+    metrics?: {
+      matched?: number;
+      new_or_unmatched?: number;
+      missing?: number;
+      ambiguous?: number;
+      match_rate?: number;
+    };
+    preview?: {
+      summary_text?: string;
+      matches_rows?: Record<string, unknown>[];
+    };
+    outputs?: {
+      matches_csv?: string;
+      summary_txt?: string;
+    };
+    error?: boolean;
+    message?: string;
+  };
+  preview?: {
+    matched_preview?: Record<string, unknown>[];
+    exceptions_preview?: Record<string, unknown>[];
+  } | null;
 };
 
 const SUGGESTED = [
@@ -31,6 +61,9 @@ export function AgentDrawer() {
   const [lastProvider, setLastProvider] = useState<'featherless' | 'custom' | 'fallback'>('fallback');
   const [lastError, setLastError] = useState<string | null>(null);
   const [resolvedModel, setResolvedModel] = useState<string | null>(null);
+  const [mvpState, setMvpState] = useState<MvpState | null>(null);
+  const lastIntentRef = useRef<'mvp-analyze' | null>(null);
+  const lastMvpJobRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -71,9 +104,30 @@ export function AgentDrawer() {
     state.step,
   ]);
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<MvpState>).detail;
+      setMvpState(detail);
+    };
+    window.addEventListener('mvp:state', handler as EventListener);
+    return () => window.removeEventListener('mvp:state', handler as EventListener);
+  }, []);
+
+  useEffect(() => {
+    if (!mvpState?.result || mvpState.result.error) return;
+    if (mvpState.result.status !== 'ok') return;
+    const jobKey = `${mvpState.result.metrics?.matched ?? 0}-${mvpState.result.metrics?.match_rate ?? 0}`;
+    if (lastMvpJobRef.current === jobKey) return;
+    lastMvpJobRef.current = jobKey;
+  }, [mvpState]);
+
   const answerQuestion = (raw: string) => {
     const q = raw.trim().toLowerCase();
     const hasData = summary.runCount > 0;
+    const onMvp = window.location.pathname.includes('/mvp');
+    const mvpMetrics = mvpState?.result?.metrics;
+    const mvpMatchRate = mvpMetrics?.match_rate ?? 0;
+    const mvpHasResults = Boolean(mvpState?.result && !mvpState?.result?.error && mvpState?.result?.status === 'ok');
     const stepLine = `You're on step ${state.step + 1}/${STEPS.length}: ${summary.step}.`;
     const nextLine = summary.nextStep ? `Next step: ${summary.nextStep}.` : 'This is the final step.';
 
@@ -101,9 +155,20 @@ export function AgentDrawer() {
     }
 
     if (q.includes('data') || q.includes('run') || q.includes('dataset')) {
+      if (onMvp) {
+        if (!mvpHasResults) return 'No MVP results yet. Upload a file and run the MVP.';
+        return `MVP results are ready. Match rate: ${mvpMatchRate}%. Matched: ${mvpMetrics?.matched ?? 0}, new/unmatched: ${mvpMetrics?.new_or_unmatched ?? 0}, missing: ${mvpMetrics?.missing ?? 0}, ambiguous: ${mvpMetrics?.ambiguous ?? 0}.`;
+      }
       if (!hasData) return 'No runs loaded yet. Upload files or load the example dataset.';
       const names = summary.runNames.length > 0 ? `Runs: ${summary.runNames.join(', ')}.` : 'Runs are loaded.';
       return `Loaded ${summary.runCount} run(s). ${names}`;
+    }
+
+    if (onMvp && (q.includes('result') || q.includes('mvp') || q.includes('summary') || q.includes('download') || q.includes('explain'))) {
+      if (!mvpHasResults) return 'MVP has not finished yet. Run the MVP to generate results.';
+      const download = mvpState?.result?.outputs?.matches_csv ? 'Downloads are available in the Downloads section.' : 'Downloads not ready yet.';
+      const summaryText = mvpState?.result?.preview?.summary_text ? 'Summary text is available below.' : 'Summary text not available.';
+      return `MVP summary: match rate ${mvpMatchRate}%. Matched ${mvpMetrics?.matched ?? 0}, new/unmatched ${mvpMetrics?.new_or_unmatched ?? 0}, missing ${mvpMetrics?.missing ?? 0}, ambiguous ${mvpMetrics?.ambiguous ?? 0}. ${download} ${summaryText}`;
     }
 
     if (q.includes('page') || q.includes('screen') || q.includes('view') || q.includes('where am')) {
@@ -136,10 +201,13 @@ export function AgentDrawer() {
   };
 
   const runCommand = (raw: string) => {
-    const q = raw.trim().toLowerCase();
+    const q = raw.trim().toLowerCase().replace(/^hey piper[,\s]+/i, '');
     const runAlign = /run\s+(the\s+)?alignment|start\s+(the\s+)?alignment|align\s+runs/;
     const runMatch = /run\s+(the\s+)?matching|start\s+(the\s+)?matching|match\s+anomalies/;
     const runGrowth = /run\s+(the\s+)?growth|start\s+(the\s+)?growth|growth\s+analysis/;
+    const runAnalytics = /run\s+(the\s+)?analytics|run\s+analysis/;
+    const runMvp = /run\s+(the\s+)?mvp/;
+    const analyzeFile = /analyze(\s+(the|this|my))?\s+file|analyze\s+it/;
     if (runAlign.test(q)) {
       runAlignment();
       return 'Running alignment now.';
@@ -149,6 +217,26 @@ export function AgentDrawer() {
       return 'Running matching now.';
     }
     if (runGrowth.test(q)) {
+      runGrowthAnalysis();
+      return 'Running growth analysis now.';
+    }
+    if (runMvp.test(q) || analyzeFile.test(q)) {
+      window.dispatchEvent(new Event('mvp:run'));
+      const close = document.querySelector<HTMLButtonElement>('[data-agent-close]');
+      close?.click();
+      lastIntentRef.current = 'mvp-analyze';
+      return 'Analyzing the file now.';
+    }
+    if (runAnalytics.test(q)) {
+      if (state.runs.length < 2) return 'Upload at least two runs before running analytics.';
+      if (state.alignments.length === 0) {
+        runAlignment();
+        return 'Running alignment now.';
+      }
+      if (state.matchedGroups.length === 0) {
+        runMatching();
+        return 'Running matching now.';
+      }
       runGrowthAnalysis();
       return 'Running growth analysis now.';
     }
@@ -185,7 +273,7 @@ export function AgentDrawer() {
   const elevenModel = (import.meta.env.VITE_ELEVENLABS_MODEL as string | undefined) || 'eleven_multilingual_v2';
 
   const buildContext = () => ({
-    page: 'Analysis',
+    page: window.location.pathname.includes('/mvp') ? 'MVP' : 'Analysis',
     stepIndex: state.step,
     stepLabel: summary.step,
     isProcessing: summary.isProcessing,
@@ -208,6 +296,7 @@ export function AgentDrawer() {
     },
     qualityMetrics: state.qualityMetrics,
     settings: state.settings,
+    mvp: mvpState,
   });
 
   const buildContextSummary = () => {
@@ -257,6 +346,9 @@ export function AgentDrawer() {
       sampleMatches.length > 0
         ? `SAMPLE MATCHES: ${sampleMatches.map(m => `${m.id} ${m.confidence} ${m.score.toFixed(3)}`).join(' | ')}`
         : 'SAMPLE MATCHES: none',
+      mvpState?.result?.metrics
+        ? `MVP SUMMARY: match rate ${mvpState.result.metrics.match_rate ?? 0}%, matched ${mvpState.result.metrics.matched ?? 0}, new/unmatched ${mvpState.result.metrics.new_or_unmatched ?? 0}, missing ${mvpState.result.metrics.missing ?? 0}, ambiguous ${mvpState.result.metrics.ambiguous ?? 0}`
+        : 'MVP SUMMARY: none',
     ].join('\n');
   };
 
@@ -550,6 +642,7 @@ export function AgentDrawer() {
         <SheetHeader>
           <SheetTitle className="text-sm font-mono uppercase tracking-wider">Analysis Agent</SheetTitle>
         </SheetHeader>
+        <SheetClose className="sr-only" data-agent-close>Close</SheetClose>
 
         <div className="mt-4 space-y-4 h-full flex flex-col pb-14">
           <div className="border bg-card">

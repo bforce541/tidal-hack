@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +26,8 @@ import {
   type PipelineRunResponse,
 } from "@/lib/api";
 import { Loader2, FileDown, ArrowLeft, Upload, ChevronDown } from "lucide-react";
+import { AnalysisProvider } from "@/context/AnalysisContext";
+import { AgentDrawer } from "@/components/analysis/AgentDrawer";
 
 type RunPair = "2007,2015" | "2015,2022";
 
@@ -66,7 +68,19 @@ export default function Mvp() {
   const runsList = runs === "2007,2015" ? [2007, 2015] : [2015, 2022];
   const [prevYear, laterYear] = runsList[0] < runsList[1] ? [runsList[0], runsList[1]] : [runsList[1], runsList[0]];
 
-  const handleRun = async () => {
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("mvp:state", {
+      detail: {
+        hasFile: Boolean(file),
+        runs,
+        loading,
+        result,
+        preview: result?.preview ?? null,
+      },
+    }));
+  }, [file, runs, loading, result]);
+
+  const handleRun = useCallback(async () => {
     setError(null);
     setResult(null);
     setPreviewLimit(25);
@@ -88,7 +102,13 @@ export default function Mvp() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [file, runsList, debug]);
+
+  useEffect(() => {
+    const handler = () => void handleRun();
+    window.addEventListener("mvp:run", handler as EventListener);
+    return () => window.removeEventListener("mvp:run", handler as EventListener);
+  }, [handleRun]);
 
   const handleViewMore = async () => {
     if (!result || previewLimit >= 100) return;
@@ -119,7 +139,7 @@ export default function Mvp() {
         ? Object.keys(matchesRows[0])
         : [];
 
-  return (
+  const content = (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b bg-card/50 px-6 h-12 flex items-center justify-between shrink-0">
         <Button
@@ -361,5 +381,25 @@ export default function Mvp() {
         )}
       </main>
     </div>
+  );
+
+  return (
+    <AnalysisProvider>
+      <div className="min-h-screen bg-background flex">
+        <aside className="w-72 shrink-0 border-r bg-sidebar text-sidebar-foreground">
+          <div className="border-b border-sidebar-border px-4 py-3">
+            <p className="text-xs font-mono uppercase tracking-widest text-sidebar-foreground/60">
+              Analysis Agent
+            </p>
+          </div>
+          <div className="p-3">
+            <AgentDrawer />
+          </div>
+        </aside>
+        <main className="flex-1 min-w-0">
+          {content}
+        </main>
+      </div>
+    </AnalysisProvider>
   );
 }
