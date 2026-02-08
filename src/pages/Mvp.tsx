@@ -472,7 +472,7 @@ export default function Mvp() {
           <Card className="w-full max-w-md border-white/15 bg-zinc-900 text-white shadow-2xl">
             <CardContent className="pt-8 pb-8 flex flex-col items-center gap-4">
               <Loader2 className="h-10 w-10 animate-spin text-cyan-300" />
-              <p className="text-base font-semibold tracking-wide">Future predecitions loading</p>
+              <p className="text-base font-semibold tracking-wide">Future Projections loading</p>
               <p className="text-xs text-zinc-300 text-center">
                 Preparing future projections and loading visual summaries...
               </p>
