@@ -1,0 +1,365 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  uploadFile,
+  runPipeline,
+  pipelineOutputUrl,
+  pipelinePreviewUrl,
+  type PipelineRunResponse,
+} from "@/lib/api";
+import { Loader2, FileDown, ArrowLeft, Upload, ChevronDown } from "lucide-react";
+
+type RunPair = "2007,2015" | "2015,2022";
+
+const RUN_OPTIONS: { value: RunPair; label: string }[] = [
+  { value: "2007,2015", label: "2007 → 2015" },
+  { value: "2015,2022", label: "2015 → 2022" },
+];
+
+const PREFERRED_MATCH_COLUMNS = [
+  "2015 Anomaly ID",
+  "2022 Anomaly ID",
+  "2015 Distance (Aligned, m)",
+  "2022 Distance (m)",
+  "Distance Difference (m)",
+  "2015 Depth (%)",
+  "2022 Depth (%)",
+  "Match Quality",
+  "Needs Review",
+];
+
+function formatCell(val: string | number | null | undefined): string {
+  if (val == null || val === "") return "—";
+  if (typeof val === "number") return Number.isInteger(val) ? String(val) : val.toFixed(3);
+  return String(val);
+}
+
+export default function Mvp() {
+  const navigate = useNavigate();
+  const [file, setFile] = useState<File | null>(null);
+  const [runs, setRuns] = useState<RunPair>("2015,2022");
+  const [debug, setDebug] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<PipelineRunResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [previewLimit, setPreviewLimit] = useState(25);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const runsList = runs === "2007,2015" ? [2007, 2015] : [2015, 2022];
+  const [prevYear, laterYear] = runsList[0] < runsList[1] ? [runsList[0], runsList[1]] : [runsList[1], runsList[0]];
+
+  const handleRun = async () => {
+    setError(null);
+    setResult(null);
+    setPreviewLimit(25);
+    if (!file) {
+      setError("Please upload an Excel file.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { storedPath } = await uploadFile(file);
+      const data = await runPipeline({
+        inputPath: storedPath,
+        runs: runsList,
+        debug,
+      });
+      setResult(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Pipeline failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleViewMore = async () => {
+    if (!result || previewLimit >= 100) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(pipelinePreviewUrl(100, prevYear, laterYear));
+      if (!res.ok) throw new Error("Failed to load more");
+      const data = await res.json();
+      setResult((prev) => prev ? { ...prev, preview: { ...prev.preview, matches_rows: data.matches_rows } } : null);
+      setPreviewLimit(100);
+    } catch {
+      setError("Failed to load more rows");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const success = result?.status === "ok" && result.outputs;
+  const matchesRows = result?.preview?.matches_rows ?? [];
+  const summaryText = result?.preview?.summary_text ?? "";
+  const preferredCols = matchesRows.length > 0
+    ? PREFERRED_MATCH_COLUMNS.filter((c) => c in (matchesRows[0] || {}))
+    : [];
+  const columns =
+    preferredCols.length > 0
+      ? preferredCols
+      : matchesRows.length > 0 && matchesRows[0]
+        ? Object.keys(matchesRows[0])
+        : [];
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <header className="border-b bg-card/50 px-6 h-12 flex items-center justify-between shrink-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 text-muted-foreground hover:text-foreground"
+          onClick={() => navigate("/")}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Button>
+        <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          PipeAlign
+        </span>
+        <div className="w-16" />
+      </header>
+
+      <main className="flex-1 max-w-4xl mx-auto w-full py-8 px-6 space-y-8">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Run Pipeline
+          </h1>
+          <p className="text-sm text-muted-foreground max-w-2xl">
+            Upload your ILI Excel file, choose run years, then run the pipeline. Download matches (CSV) and summary (plain text).
+          </p>
+        </div>
+
+        <Card className="border border-border/80 bg-card shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base font-medium">Input</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div>
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Upload ILI Excel (.xlsx)
+              </Label>
+              <div className="mt-2 flex items-center gap-3">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    className="sr-only"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  />
+                  <span className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium ring-offset-background hover:bg-accent hover:text-accent-foreground">
+                    <Upload className="h-4 w-4" />
+                    Choose file
+                  </span>
+                </label>
+                {file && (
+                  <span className="text-sm text-muted-foreground">
+                    {file.name}
+                    {file.size > 0 && (
+                      <span className="ml-1 font-mono text-2xs">
+                        ({(file.size / 1024).toFixed(1)} KB)
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground block mb-2">
+                Run pair
+              </Label>
+              <Select value={runs} onValueChange={(v) => setRuns(v as RunPair)} disabled={loading}>
+                <SelectTrigger className="max-w-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RUN_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="debug"
+                checked={debug}
+                onChange={(e) => setDebug(e.target.checked)}
+              />
+              <Label htmlFor="debug" className="text-xs text-muted-foreground">
+                Debug (show traceback on error)
+              </Label>
+            </div>
+            <Button
+              onClick={handleRun}
+              disabled={loading || !file}
+              className="gap-2 rounded-lg"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Running pipeline…
+                </>
+              ) : (
+                "Run Pipeline"
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {error && (
+          <Card className="border-destructive/50 bg-destructive/5">
+            <CardContent className="pt-6">
+              <p className="text-sm font-medium text-destructive">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {success && result && (
+          <div className="space-y-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Metrics
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+              {[
+                { label: "Matched", value: result.metrics.matched },
+                { label: "New / unmatched", value: result.metrics.new_or_unmatched },
+                { label: "Missing", value: result.metrics.missing },
+                { label: "Ambiguous", value: result.metrics.ambiguous },
+                { label: "Match rate", value: `${result.metrics.match_rate}%` },
+              ].map(({ label, value }) => (
+                <Card
+                  key={label}
+                  className="border border-border/80 bg-muted/20 shadow-sm overflow-hidden"
+                >
+                  <CardContent className="p-4">
+                    <p className="text-2xl font-semibold tabular-nums text-foreground">
+                      {value}
+                    </p>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground mt-0.5">
+                      {label}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Downloads
+              </h2>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href={pipelineOutputUrl(result.outputs.matches_csv)}
+                  download={`matches_${prevYear}_${laterYear}.csv`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="default" size="sm" className="gap-2">
+                    <FileDown className="h-3.5 w-3.5" />
+                    Download Matches
+                  </Button>
+                </a>
+                <a
+                  href={pipelineOutputUrl(result.outputs.summary_txt)}
+                  download={`summary_${prevYear}_${laterYear}.txt`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <FileDown className="h-3.5 w-3.5" />
+                    Download Summary
+                  </Button>
+                </a>
+              </div>
+            </div>
+
+            <Card className="border border-border/80 bg-card shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base font-medium">Matches preview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {matchesRows.length > 0 ? (
+                  <>
+                    <div className="overflow-x-auto overflow-y-auto max-h-[320px] rounded-md border border-border/80">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="sticky top-0 z-10 bg-muted/80 backdrop-blur border-b">
+                            {columns.map((col) => (
+                              <TableHead key={col} className="whitespace-nowrap font-mono text-xs text-left">
+                                {col}
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {matchesRows.map((row, i) => (
+                            <TableRow key={i}>
+                              {columns.map((col) => (
+                                <TableCell key={col} className="font-mono text-xs whitespace-nowrap">
+                                  {formatCell(row[col])}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {previewLimit < 100 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-2 gap-1 text-muted-foreground"
+                        onClick={handleViewMore}
+                        disabled={loadingMore}
+                      >
+                        {loadingMore ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        )}
+                        View more (up to 100 rows)
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-4">No matches to preview.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border border-border/80 bg-card shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base font-medium">Summary preview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-words overflow-auto max-h-[240px] rounded-md border border-border/80 p-3 bg-muted/20">
+                  {summaryText || "No summary."}
+                </pre>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
