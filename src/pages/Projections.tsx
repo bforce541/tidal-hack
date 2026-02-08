@@ -416,16 +416,16 @@ export default function Projections() {
                 <h2 className="text-lg font-semibold text-foreground">
                   Change from {baselineYear ?? "baseline"} → 2030
                 </h2>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-sm text-muted-foreground/90 mt-1">
                   These charts show how anomaly depth evolves from the earliest available inspection year to the 2030 projection, extending observed patterns for planning.
                 </p>
               </div>
 
               {/* Chart A: Projected average depth over time */}
               {averageDepthByYear.length > 0 && (
-                <Card className="border border-border/80 bg-card shadow-sm">
+                <Card className="border border-border bg-card shadow-sm">
                   <CardHeader>
-                    <CardTitle className="text-base font-medium">Projected average depth over time</CardTitle>
+                    <CardTitle className="text-base font-semibold text-foreground">Projected average depth over time</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="h-[240px] flex items-end gap-1">
@@ -436,14 +436,14 @@ export default function Projections() {
                           title={`${year}: ${mean}% (n=${count})`}
                         >
                           <div
-                            className="w-full rounded-t bg-primary/70 min-h-[4px]"
+                            className={`w-full rounded-t min-h-[4px] ${year === 2030 ? "bg-[#0B1F33]" : "bg-muted-foreground/35"}`}
                             style={{ height: `${Math.min(100, (mean / 100) * 200)}px` }}
                           />
-                          <span className="text-[10px] text-muted-foreground">{year}</span>
+                          <span className={`text-[10px] ${year === 2030 ? "text-foreground font-medium" : "text-muted-foreground"}`}>{year}</span>
                         </div>
                       ))}
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground/90">
                       This chart shows how average anomaly depth has changed over past inspection years and how that trend extends toward 2030.
                       The gradual upward movement reflects long-term progression rather than sudden change, supporting forward-looking maintenance planning.
                     </p>
@@ -453,28 +453,31 @@ export default function Projections() {
 
               {/* Chart C: Δ Depth baseline → 2030 */}
               {deltasBaselineTo2030.length > 0 && (
-                <Card className="border border-border/80 bg-card shadow-sm">
+                <Card className="border border-border bg-card shadow-sm">
                   <CardHeader>
-                    <CardTitle className="text-base font-medium">Change per anomaly ({baselineYear ?? "baseline"} → 2030)</CardTitle>
+                    <CardTitle className="text-base font-semibold text-foreground">Change per anomaly ({baselineYear ?? "baseline"} → 2030)</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <div className="h-[220px] overflow-auto">
                       <div className="space-y-1.5">
-                        {deltaBaseline2030Bins.map((b) => (
-                          <div key={b.label} className="flex items-center gap-2">
-                            <span className="w-24 text-xs text-muted-foreground shrink-0">{b.label}</span>
-                            <div className="flex-1 min-w-0 h-5 bg-muted/50 rounded overflow-hidden">
-                              <div
-                                className="h-full bg-primary/70 rounded"
-                                style={{ width: `${Math.min(100, (b.count / Math.max(1, Math.max(...deltaBaseline2030Bins.map((x) => x.count)))) * 100)}%` }}
-                              />
+                        {deltaBaseline2030Bins.map((b, i) => {
+                          const isPositiveGrowth = DELTA_BIN_RANGES[i] && DELTA_BIN_RANGES[i].lo >= 1;
+                          return (
+                            <div key={b.label} className="flex items-center gap-2">
+                              <span className={`w-24 text-xs shrink-0 ${isPositiveGrowth ? "text-foreground/90" : "text-muted-foreground"}`}>{b.label}</span>
+                              <div className="flex-1 min-w-0 h-5 bg-muted/50 rounded overflow-hidden">
+                                <div
+                                  className={`h-full rounded ${isPositiveGrowth ? "bg-[#0B1F33]" : "bg-muted-foreground/35"}`}
+                                  style={{ width: `${Math.min(100, (b.count / Math.max(1, Math.max(...deltaBaseline2030Bins.map((x) => x.count)))) * 100)}%` }}
+                                />
+                              </div>
+                              <span className="text-xs font-mono w-6 text-right text-muted-foreground">{b.count}</span>
                             </div>
-                            <span className="text-xs font-mono w-6 text-right">{b.count}</span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground pt-1">
+                    <p className="text-sm text-muted-foreground/90 pt-1">
                       Positive values indicate projected deepening by 2030.
                     </p>
                   </CardContent>
