@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAnalysis } from '@/context/AnalysisContext';
 import { ArrowLeft, Upload, GitCompare, Layers, TrendingUp, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AgentDrawer } from '@/components/analysis/AgentDrawer';
 
 const steps = [
   { icon: Upload, label: 'Upload', key: 0 },
@@ -25,11 +26,11 @@ export function StepSidebar() {
   };
 
   return (
-    <aside className="flex w-48 flex-col border-r bg-sidebar text-sidebar-foreground shrink-0">
+    <aside className="flex w-72 flex-col border-r bg-sidebar text-sidebar-foreground shrink-0">
       <div className="flex items-center gap-2 border-b border-sidebar-border px-3 h-10">
         <button
           onClick={() => navigate('/')}
-          className="flex items-center gap-1.5 text-2xs text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors font-mono uppercase tracking-wider"
+          className="flex items-center gap-1.5 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors font-mono uppercase tracking-wider"
         >
           <ArrowLeft className="h-3 w-3" />
           Home
@@ -37,7 +38,7 @@ export function StepSidebar() {
       </div>
 
       <nav className="flex-1 py-2 px-2">
-        <p className="text-2xs font-mono uppercase tracking-widest text-sidebar-foreground/40 px-2 py-1.5 mb-1">
+        <p className="text-xs font-mono uppercase tracking-widest text-sidebar-foreground/40 px-2 py-1.5 mb-1">
           Pipeline
         </p>
         {steps.map((step, idx) => {
@@ -64,19 +65,24 @@ export function StepSidebar() {
               )}>
                 {isCompleted && !isActive ? '✓' : idx + 1}
               </span>
-              <span className="truncate font-mono text-2xs uppercase tracking-wider">{step.label}</span>
+              <span className="truncate font-mono text-xs uppercase tracking-wider">{step.label}</span>
             </button>
           );
         })}
       </nav>
 
+      <div className="border-t border-sidebar-border px-3 py-2">
+        <p className="text-xs font-mono uppercase tracking-widest text-sidebar-foreground/40 mb-2">Assistant</p>
+        <AgentDrawer />
+      </div>
+
       {state.runs.length > 0 && (
         <div className="border-t border-sidebar-border px-3 py-2">
-          <p className="text-2xs font-mono uppercase tracking-widest text-sidebar-foreground/40 mb-1.5">Runs</p>
+          <p className="text-xs font-mono uppercase tracking-widest text-sidebar-foreground/40 mb-1.5">Runs</p>
           {state.runs.map((r) => (
             <div key={r.id} className="flex items-center gap-1.5 py-0.5">
               <span className="h-1 w-1 bg-sidebar-primary shrink-0" />
-              <p className="text-2xs text-sidebar-foreground/60 truncate font-mono">{r.name}</p>
+              <p className="text-xs text-sidebar-foreground/60 truncate font-mono">{r.name}</p>
             </div>
           ))}
         </div>
@@ -84,7 +90,7 @@ export function StepSidebar() {
 
       {state.qualityMetrics && (
         <div className="border-t border-sidebar-border px-3 py-2">
-          <p className="text-2xs font-mono uppercase tracking-widest text-sidebar-foreground/40 mb-1.5">Stats</p>
+          <p className="text-xs font-mono uppercase tracking-widest text-sidebar-foreground/40 mb-1.5">Stats</p>
           <div className="grid grid-cols-2 gap-1">
             <Stat label="Anchors" value={state.qualityMetrics.totalAnchors} />
             <Stat label="Matched" value={state.qualityMetrics.totalAnomalies} />
@@ -100,7 +106,7 @@ export function StepSidebar() {
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div>
-      <p className="text-2xs text-sidebar-foreground/40">{label}</p>
+      <p className="text-xs text-sidebar-foreground/40">{label}</p>
       <p className="text-xs font-mono text-sidebar-foreground">{value}</p>
     </div>
   );

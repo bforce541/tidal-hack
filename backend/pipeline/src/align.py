@@ -1,12 +1,14 @@
 """
 Weld-anchored alignment: girth welds as hard anchors, segment-wise linear mapping.
 
-- Weld detection: "weld", "gw", "girth" (case-insensitive); fallback to joint boundaries
+- Anchor welds: only "girth weld" (or girth/GW when seam weld not present). Exclude "seam weld" anomalies.
 - Explicit scale/offset per segment with degenerate_segment + monotonic flags
 """
 
 from __future__ import annotations
 
+import logging
+import re
 from typing import Optional
 
 import pandas as pd
@@ -15,32 +17,76 @@ from config import SEGMENT_LENGTH_MIN_M
 from src.normalize import DISTANCE, DISTANCE_CORRECTED, RELATIVE_POSITION
 from src.schema import FEATURE_TYPE, JOINT_NUMBER
 
+logger = logging.getLogger(__name__)
+
 # Use normalize column names
 RUN_YEAR = "run_year"
 WELD_UID = "weld_uid"
 WELD_INDEX = "weld_index"
 SEGMENT_ID = "segment_id"
 
-# Weld event patterns (case-insensitive)
-WELD_PATTERNS = ["weld", "gw", "girth"]
+MIN_ANCHORS_FOR_ALIGNMENT = 30
 
 
-def is_weld(event: str) -> bool:
-    """Detect explicit weld markers."""
-    if pd.isna(event):
+def is_anchor_weld(desc: str) -> bool:
+    """
+    True only for girth welds used as anchors. Excludes seam-weld anomalies.
+    - Missing/empty -> False
+    - Contains 'seam weld' (case-insensitive) -> False
+    - Contains 'girth weld' -> True
+    - Optionally: girth or GW only (no seam weld) -> True
+    """
+    if pd.isna(desc):
         return False
-    s = str(event).strip().lower()
-    return any(p in s for p in WELD_PATTERNS)
+    s = str(desc).strip().lower()
+    if not s:
+        return False
+    if "seam weld" in s:
+        return False
+    if "girth weld" in s:
+        return True
+    if "girth" in s:
+        return True
+    if re.search(r"\bgw\b", s) or s == "gw":
+        return True
+    return False
+
+
+def _has_weld_substring(desc: str) -> bool:
+    """True if desc contains 'weld' (for logging stats)."""
+    if pd.isna(desc):
+        return False
+    return "weld" in str(desc).strip().lower()
 
 
 def get_welds_explicit(df: pd.DataFrame, year: int) -> Optional[pd.DataFrame]:
-    """Extract welds from explicit weld events. Returns None if none found."""
+    """Extract welds from explicit girth-weld events only. Excludes seam-weld anomalies. Returns None if none found or < MIN_ANCHORS."""
     if FEATURE_TYPE not in df.columns:
         return None
-    mask = df[FEATURE_TYPE].apply(is_weld)
-    if not mask.any():
+    col = df[FEATURE_TYPE]
+    # Stats for logging
+    weld_substring_mask = col.apply(_has_weld_substring)
+    total_with_weld = int(weld_substring_mask.sum())
+    anchor_mask = col.apply(is_anchor_weld)
+    n_kept = int(anchor_mask.sum())
+    n_excluded = total_with_weld - n_kept
+    logger.info(
+        "Weld anchors (run %s): rows containing 'weld'=%s, kept as girth weld anchors=%s, excluded (e.g. seam weld)=%s",
+        year,
+        total_with_weld,
+        n_kept,
+        n_excluded,
+    )
+    if n_kept < MIN_ANCHORS_FOR_ALIGNMENT:
+        logger.warning(
+            "Anchor count %s < %s; falling back to identity (no correction).",
+            n_kept,
+            MIN_ANCHORS_FOR_ALIGNMENT,
+        )
         return None
-    w = df[mask].copy()
+    if not anchor_mask.any():
+        return None
+    w = df[anchor_mask].copy()
     dist_col = DISTANCE if DISTANCE in df.columns else "distance_raw_m"
     if dist_col not in w.columns:
         return None
@@ -50,6 +96,7 @@ def get_welds_explicit(df: pd.DataFrame, year: int) -> Optional[pd.DataFrame]:
     w = w.sort_values(dist_col).reset_index(drop=True)
     w[WELD_INDEX] = w.index
     w["distance_raw_m"] = w[dist_col]
+    logger.info("Final anchor count used for alignment (run %s): %s", year, len(w))
     return w
 
 
