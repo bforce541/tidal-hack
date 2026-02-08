@@ -165,18 +165,36 @@ def parse_run(
     return out, schema_info
 
 
+def _detect_run_years_from_sheets(sheet_names: list[str]) -> list[int]:
+    """Infer run years from sheet names: sheets that are 4-digit years in 1900..2100."""
+    years = []
+    for name in sheet_names:
+        s = (name or "").strip()
+        if len(s) == 4 and s.isdigit():
+            y = int(s)
+            if 1900 <= y <= 2100:
+                years.append(y)
+    return sorted(set(years))
+
+
 def load_and_parse_runs(
     path: str | Path,
     run_years: list[int],
 ) -> tuple[dict[int, pd.DataFrame], dict[str, Any]]:
     """
     Load Excel, parse requested run sheets.
+    Runs are detected by sheet names equal to str(year) (e.g. sheet "2007" for year 2007).
     Returns: (parsed_runs {year: df}, full_schema_report).
+    Report includes: sheets_found, detected_run_years, runs[year]: { sheet_found, error?, rows },
+    and parse_failure_message when not all requested years could be parsed.
     """
+    path = Path(path)
     xl = pd.ExcelFile(path)
+    detected_years = _detect_run_years_from_sheets(xl.sheet_names)
     report: dict[str, Any] = {
         "source": str(path),
         "sheets_found": xl.sheet_names,
+        "detected_run_years": detected_years,
         "run_years_requested": run_years,
         "runs": {},
         "errors": [],
@@ -185,12 +203,39 @@ def load_and_parse_runs(
     for year in run_years:
         sheet = str(year)
         if sheet not in xl.sheet_names:
+            report["runs"][str(year)] = {
+                "sheet_found": False,
+                "error": f"Sheet '{sheet}' not found",
+                "rows": 0,
+            }
             report["errors"].append(f"Sheet '{sheet}' not found")
             continue
-        df = pd.read_excel(path, sheet_name=sheet)
-        parsed, info = parse_run(df, year, sheet)
-        result[year] = parsed
-        report["runs"][str(year)] = info
+        try:
+            df = pd.read_excel(path, sheet_name=sheet)
+            parsed_df, info = parse_run(df, year, sheet)
+            result[year] = parsed_df
+            report["runs"][str(year)] = {
+                **info,
+                "sheet_found": True,
+                "rows": len(parsed_df),
+                "error": None,
+            }
+        except Exception as e:
+            report["runs"][str(year)] = {
+                "sheet_found": True,
+                "error": str(e),
+                "rows": 0,
+            }
+            report["errors"].append(f"Sheet '{sheet}': {e}")
+
+    if len(result) != len(run_years):
+        available = report.get("detected_run_years") or report["sheets_found"]
+        report["parse_failure_message"] = (
+            f"Could not parse requested runs {run_years}. "
+            f"Available runs in file (sheet names): {available}. "
+            f"Your file contains sheets: {report['sheets_found']}; choose runs that match sheet names (e.g. {detected_years or 'see list above'})."
+        )
+
     return result, report
 
 

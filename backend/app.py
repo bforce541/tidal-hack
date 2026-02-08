@@ -19,6 +19,9 @@ import uuid
 import zipfile
 from pathlib import Path
 
+import pandas as pd
+
+from continued import compute_continued_issues
 from summary_txt import build_summary_txt
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Query
@@ -309,34 +312,23 @@ def _read_matches_preview(matches_csv_path: Path, limit: int) -> list[dict]:
     return rows
 
 
-@app.post("/api/pipeline/run")
-def api_pipeline_run(body: dict):
+def run_one_pair(
+    input_path: str,
+    runs_list: list[int],
+    debug: bool = False,
+) -> dict:
     """
-    Single pipeline endpoint. Body: { inputPath: str, runs: number[], debug?: bool }.
-    Runs alignment + matching + growth. Writes matches_<prev>_<later>.csv and summary_<prev>_<later>.txt
-    to output/matching/. Returns status, outputs (matches_csv, summary_txt), preview, metrics.
+    Run pipeline for one pair [prev, later]. Writes to OUTPUT_MATCHING_DIR.
+    Returns dict: status ("ok" | "error"), job_id?, outputs?, preview?, metrics?, detail? (on error).
     """
-    input_path = body.get("inputPath")
-    runs = body.get("runs")
-    debug = bool(body.get("debug", False))
-
-    if not input_path or not isinstance(input_path, str):
-        raise HTTPException(status_code=400, detail="inputPath (string) is required")
-    if not runs or not isinstance(runs, list):
-        raise HTTPException(status_code=400, detail="runs (list of integers) is required")
-    try:
-        runs_list = [int(r) for r in runs]
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="runs must be a list of integers")
     if len(runs_list) != 2:
-        raise HTTPException(status_code=400, detail="runs must be exactly two years (e.g. [2015, 2022])")
-
+        return {"status": "error", "detail": "runs must be exactly two years"}
     try:
         resolved = _resolve_input_path(input_path)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return {"status": "error", "detail": str(e)}
     if not resolved.exists():
-        raise HTTPException(status_code=400, detail=f"Input path does not exist: {resolved}")
+        return {"status": "error", "detail": f"Input path does not exist: {resolved}"}
 
     job_id = str(uuid.uuid4())
     job_dir = JOBS_DIR / job_id
@@ -359,21 +351,38 @@ def api_pipeline_run(body: dict):
             timeout=300,
         )
     except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="Pipeline timed out after 300s")
+        return {"status": "error", "detail": "Pipeline timed out after 300s"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "error", "detail": str(e)}
 
     if result.returncode != 0:
-        stderr_tail = (result.stderr or "").strip().split("\n")[-10:]
-        raise HTTPException(
-            status_code=422,
-            detail="Pipeline failed. " + ("; ".join(stderr_tail) if stderr_tail else result.stderr or "Unknown error"),
-        )
+        detail = ""
+        schema_path = job_dir / "tables" / "schema_report.json"
+        if schema_path.exists():
+            try:
+                with open(schema_path) as f:
+                    schema_report = json.load(f)
+                msg = schema_report.get("parse_failure_message")
+                if msg:
+                    detail = msg
+                elif schema_report.get("detected_run_years") is not None or schema_report.get("sheets_found"):
+                    available = schema_report.get("detected_run_years") or schema_report.get("sheets_found", [])
+                    detail = (
+                        f"Could not parse requested runs {runs_list}. "
+                        f"Available runs in file (sheet names): {available}. "
+                        "Choose runs that match sheet names."
+                    )
+            except Exception:
+                pass
+        if not detail:
+            stderr_tail = (result.stderr or "").strip().split("\n")[-10:]
+            detail = "Pipeline failed. " + ("; ".join(stderr_tail) if stderr_tail else result.stderr or "Unknown error")
+        return {"status": "error", "detail": detail}
 
     tables_dir = job_dir / "tables"
     summary_path = tables_dir / "summary.json"
     if not summary_path.exists():
-        raise HTTPException(status_code=500, detail="Pipeline completed but summary.json not found")
+        return {"status": "error", "detail": "Pipeline completed but summary.json not found"}
     with open(summary_path) as f:
         summary = json.load(f)
 
@@ -385,7 +394,6 @@ def api_pipeline_run(body: dict):
     ambiguous = int(counts.get("ambiguous", 0))
     match_rate = float(summary.get("match_rate_pct") or 0)
 
-    # Write to output/matching/ with deterministic names
     human_csv_name = f"Matches_{prev_year}_{later_year}_human.csv"
     human_src = tables_dir / human_csv_name
     matches_filename = f"matches_{prev_year}_{later_year}.csv"
@@ -397,7 +405,6 @@ def api_pipeline_run(body: dict):
     summary_text = build_summary_txt(tables_dir, prev_year, later_year, summary)
     summary_dest.write_text(summary_text, encoding="utf-8")
 
-    # Preview: first 25 rows of matches
     preview_matches_path = matches_dest if matches_dest.exists() else human_src
     matches_rows = _read_matches_preview(preview_matches_path, 25)
 
@@ -418,33 +425,172 @@ def api_pipeline_run(body: dict):
     }
     return {
         "status": "ok",
+        "job_id": job_id,
         "outputs": outputs,
         "preview": preview,
         "metrics": metrics,
     }
 
 
+@app.post("/api/pipeline/run")
+def api_pipeline_run(body: dict):
+    """
+    Single pipeline endpoint. Body: { inputPath: str, runs: number[], debug?: bool }.
+    Runs alignment + matching + growth. Writes matches_<prev>_<later>.csv and summary_<prev>_<later>.txt
+    to output/matching/. Returns status, outputs (matches_csv, summary_txt), preview, metrics.
+    """
+    input_path = body.get("inputPath")
+    runs = body.get("runs")
+    debug = bool(body.get("debug", False))
+
+    if not input_path or not isinstance(input_path, str):
+        raise HTTPException(status_code=400, detail="inputPath (string) is required")
+    if not runs or not isinstance(runs, list):
+        raise HTTPException(status_code=400, detail="runs (list of integers) is required")
+    try:
+        runs_list = [int(r) for r in runs]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="runs must be a list of integers")
+    if len(runs_list) != 2:
+        raise HTTPException(status_code=400, detail="runs must be exactly two years (e.g. [2015, 2022])")
+
+    out = run_one_pair(input_path, runs_list, debug)
+    if out.get("status") == "error":
+        raise HTTPException(status_code=422, detail=out.get("detail", "Pipeline failed"))
+    return out
+
+
+RUN_ALL_PAIRS = [(2007, 2015), (2015, 2022)]
+
+# Human-readable headers for continued issues CSV (rename at write time only).
+CONTINUED_CSV_HEADER_RENAME = {
+    "continued_2007_id": "2007 Anomaly ID (Tracked)",
+    "continued_2015_id": "2015 Anomaly ID (Tracked)",
+    "continued_2022_id": "2022 Anomaly ID (Tracked)",
+    # 2007 → 2015 section
+    "Previous Distance (m)_07_15": "2007 Distance (m)",
+    "Later Distance (m)_07_15": "2015 Distance (m)",
+    "Distance Difference (m)_07_15": "Distance Shift 2007→2015 (m)",
+    "2015 Depth (%)_07_15": "2015 Depth (%)",
+    "Previous Length (mm)_07_15": "2007 Length (mm)",
+    "Later Length (mm)_07_15": "2015 Length (mm)",
+    "Previous Width (mm)_07_15": "2007 Width (mm)",
+    "Later Width (mm)_07_15": "2015 Width (mm)",
+    "Years Between Runs_07_15": "Years Between Runs (2007→2015)",
+    "Depth Rate (%/yr)_07_15": "Depth Growth Rate 2007→2015 (%/yr)",
+    "Length Rate (mm/yr)_07_15": "Length Growth Rate 2007→2015 (mm/yr)",
+    "Width Rate (mm/yr)_07_15": "Width Growth Rate 2007→2015 (mm/yr)",
+    "Growth Flag_07_15": "Growth Flag 2007→2015",
+    "Match Quality_07_15": "Match Quality 2007→2015",
+    "Needs Review_07_15": "Needs Review 2007→2015",
+    # 2015 → 2022 section
+    "Previous Distance (m)_15_22": "2015 Distance (m)",
+    "Later Distance (m)_15_22": "2022 Distance (m)",
+    "Distance Difference (m)_15_22": "Distance Shift 2015→2022 (m)",
+    "2015 Depth (%)_15_22": "2015 Depth (%)",
+    "Previous Length (mm)_15_22": "2015 Length (mm)",
+    "Later Length (mm)_15_22": "2022 Length (mm)",
+    "Previous Width (mm)_15_22": "2015 Width (mm)",
+    "Later Width (mm)_15_22": "2022 Width (mm)",
+    "Years Between Runs_15_22": "Years Between Runs (2015→2022)",
+    "Depth Rate (%/yr)_15_22": "Depth Growth Rate 2015→2022 (%/yr)",
+    "Length Rate (mm/yr)_15_22": "Length Growth Rate 2015→2022 (mm/yr)",
+    "Width Rate (mm/yr)_15_22": "Width Growth Rate 2015→2022 (mm/yr)",
+    "Growth Flag_15_22": "Growth Flag 2015→2022",
+    "Match Quality_15_22": "Match Quality 2015→2022",
+    "Match Q": "Match Quality 2015→2022",
+}
+
+
+@app.post("/api/pipeline/run-all")
+def api_pipeline_run_all(body: dict):
+    """
+    Run pipeline for both pairs 2007→2015 and 2015→2022, then generate continued-issues artifacts.
+    Body: { "inputPath": str, "debug": bool? }.
+    Returns runs[] (one per pair) and continued_outputs (txt, csv, xlsx).
+    """
+    input_path = body.get("inputPath")
+    debug = bool(body.get("debug", False))
+    if not input_path or not isinstance(input_path, str):
+        raise HTTPException(status_code=400, detail="inputPath (string) is required")
+    try:
+        _resolve_input_path(input_path)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    runs_result = []
+    for prev, later in RUN_ALL_PAIRS:
+        pair = [prev, later]
+        out = run_one_pair(input_path, pair, debug)
+        runs_result.append({"pair": pair, **out})
+
+    continued_outputs = {}
+    continued_preview = {}
+    m1_path = OUTPUT_MATCHING_DIR / "matches_2007_2015.csv"
+    m2_path = OUTPUT_MATCHING_DIR / "matches_2015_2022.csv"
+    if m1_path.exists() and m2_path.exists():
+        df_continued, summary_txt = compute_continued_issues(m1_path, m2_path)
+        base_txt = "continued_2007_2015_vs_2015_2022.txt"
+        base_csv = "continued_2007_2015_vs_2015_2022.csv"
+        base_xlsx = "continued_2007_2022.xlsx"
+        txt_path = OUTPUT_MATCHING_DIR / base_txt
+        csv_path = OUTPUT_MATCHING_DIR / base_csv
+        xlsx_path = OUTPUT_MATCHING_DIR / base_xlsx
+        txt_path.write_text(summary_txt, encoding="utf-8")
+        continued_outputs["continued_txt"] = f"/api/files/{base_txt}"
+        # Human-readable headers for CSV only (TXT and Excel unchanged)
+        rename = {k: v for k, v in CONTINUED_CSV_HEADER_RENAME.items() if k in df_continued.columns}
+        df_csv = df_continued.rename(columns=rename)
+        df_csv.to_csv(csv_path, index=False)
+        continued_outputs["continued_csv"] = f"/api/files/{base_csv}"
+        with pd.ExcelWriter(xlsx_path, engine="openpyxl") as w:
+            df_continued.to_excel(w, sheet_name="continued_issues", index=False)
+        continued_outputs["continued_xlsx"] = f"/api/files/{base_xlsx}"
+        continued_preview["continued_rows"] = _read_matches_preview(csv_path, 25)
+        continued_preview["continued_text"] = "\n".join((summary_txt or "").strip().split("\n")[:20])
+
+    return {
+        "status": "ok",
+        "runs": runs_result,
+        "continued_outputs": continued_outputs,
+        "continued_preview": continued_preview,
+    }
+
+
 # Allowlist for pipeline output files (only these are served to UI)
 MATCHES_CSV_PATTERN = re.compile(r"^matches_\d+_\d+\.csv$")
 SUMMARY_TXT_PATTERN = re.compile(r"^summary_\d+_\d+\.txt$")
+CONTINUED_TXT_PATTERN = re.compile(r"^continued_.+\.txt$")
+CONTINUED_CSV_PATTERN = re.compile(r"^continued_.+\.csv$")
+CONTINUED_XLSX_PATTERN = re.compile(r"^continued_.+\.xlsx$")
 
 
 def _allowed_output_filename(filename: str) -> bool:
-    """Only allow matches_<prev>_<later>.csv and summary_<prev>_<later>.txt."""
+    """Allow matches_, summary_, and continued_ output files."""
     if not filename or ".." in filename or "/" in filename or "\\" in filename:
         return False
-    return bool(MATCHES_CSV_PATTERN.match(filename) or SUMMARY_TXT_PATTERN.match(filename))
+    return bool(
+        MATCHES_CSV_PATTERN.match(filename)
+        or SUMMARY_TXT_PATTERN.match(filename)
+        or CONTINUED_TXT_PATTERN.match(filename)
+        or CONTINUED_CSV_PATTERN.match(filename)
+        or CONTINUED_XLSX_PATTERN.match(filename)
+    )
 
 
 @app.get("/api/files/{filename}")
 def api_files_output(filename: str):
-    """Serve pipeline output files: only matches_<prev>_<later>.csv and summary_<prev>_<later>.txt."""
+    """Serve pipeline output files: matches, summary, and continued_* (txt, csv, xlsx)."""
     if not _allowed_output_filename(filename):
         raise HTTPException(status_code=404, detail="File not found")
     path = OUTPUT_MATCHING_DIR / filename
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
-    media_types = {"csv": "text/csv", "txt": "text/plain"}
+    media_types = {
+        "csv": "text/csv",
+        "txt": "text/plain",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
     ext = path.suffix.lower().lstrip(".")
     return FileResponse(path, filename=filename, media_type=media_types.get(ext, "application/octet-stream"))
 
@@ -471,7 +617,81 @@ def _allowed_job_filename(filename: str) -> bool:
     """Allow only safe filenames (no path traversal)."""
     if not filename or ".." in filename or "/" in filename or "\\" in filename:
         return False
-    return filename.endswith((".csv", ".json")) or filename == "output.xlsx"
+    return filename.endswith((".csv", ".json")) or filename in ("output.xlsx", "projections.xlsx")
+
+
+@app.post("/project")
+def project(body: dict):
+    """
+    Generate 2030/2040 projections from matched anomalies for a job.
+    Body: { "job_id": str, "target_years": [2030, 2040] }.
+    Uses matches CSV for that job; base_year is inferred from run.
+    Returns download_url and preview (first 20 rows of 2030).
+    """
+    job_id = body.get("job_id")
+    target_years = body.get("target_years")
+    if not job_id or not isinstance(job_id, str):
+        raise HTTPException(status_code=400, detail="job_id (string) is required")
+    if not target_years or not isinstance(target_years, list):
+        raise HTTPException(status_code=400, detail="target_years (list, e.g. [2030, 2040]) is required")
+    try:
+        target_years = [int(y) for y in target_years]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="target_years must be integers")
+    _validate_job_id(job_id)
+    tables_dir = JOBS_DIR / job_id / "tables"
+    if not tables_dir.exists():
+        raise HTTPException(status_code=404, detail="Job output not found; run pipeline first")
+    if str(PIPELINE_DIR) not in sys.path:
+        sys.path.insert(0, str(PIPELINE_DIR))
+    from src.project import compute_projections, load_matches_for_job
+    from export import write_projections_excel
+    matches_df, prev_year, later_year = load_matches_for_job(tables_dir)
+    if matches_df is None or len(matches_df) == 0:
+        raise HTTPException(status_code=422, detail="No matches found for this job")
+    base_year = later_year
+    projections_by_year = compute_projections(matches_df, base_year, target_years)
+    out_path = JOBS_DIR / job_id / "projections.xlsx"
+    write_projections_excel(projections_by_year, out_path)
+    preview_2030 = []
+    if 2030 in projections_by_year and len(projections_by_year[2030]) > 0:
+        df30 = projections_by_year[2030].head(20)
+        for _, row in df30.iterrows():
+            rec = {}
+            for k, v in row.items():
+                if hasattr(v, "item"):
+                    rec[k] = v.item()
+                elif isinstance(v, float) and v != v:
+                    rec[k] = None
+                else:
+                    rec[k] = v
+            preview_2030.append(rec)
+    download_url = f"/api/files/{job_id}/projections.xlsx"
+    return {
+        "download_url": download_url,
+        "preview": preview_2030,
+    }
+
+
+@app.get("/project/visual/{job_id}")
+def project_visual(job_id: str):
+    """
+    Time-series points per anomaly for trajectory chart.
+    Returns list of { anomaly_id, year, depth, growth_rate, flags }.
+    No aggregation; frontend builds lines and median.
+    """
+    _validate_job_id(job_id)
+    tables_dir = JOBS_DIR / job_id / "tables"
+    if not tables_dir.exists():
+        raise HTTPException(status_code=404, detail="Job output not found; run pipeline first")
+    if str(PIPELINE_DIR) not in sys.path:
+        sys.path.insert(0, str(PIPELINE_DIR))
+    from src.project import load_matches_for_job, build_visual_series
+    matches_df, prev_year, later_year = load_matches_for_job(tables_dir)
+    if matches_df is None or len(matches_df) == 0:
+        raise HTTPException(status_code=422, detail="No matches found for this job")
+    series = build_visual_series(matches_df, prev_year, later_year, [2030, 2040])
+    return {"points": series, "years": [prev_year, later_year, 2030, 2040]}
 
 
 @app.get("/api/files/{job_id}/{file_path:path}")
