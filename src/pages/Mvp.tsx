@@ -73,6 +73,7 @@ export default function Mvp() {
   const [error, setError] = useState<string | null>(null);
   const [previewLimit, setPreviewLimit] = useState(25);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingFuture, setLoadingFuture] = useState(false);
   const [historicalVisual, setHistoricalVisual] = useState<{
     points: VisualPoint[];
     years: number[];
@@ -177,6 +178,21 @@ export default function Mvp() {
     window.addEventListener("mvp:run", handler as EventListener);
     return () => window.removeEventListener("mvp:run", handler as EventListener);
   }, [handleRun]);
+
+  const handleOpenMlPredictions = useCallback(() => {
+    if (!jobId || loadingFuture) return;
+    setLoadingFuture(true);
+    window.setTimeout(() => {
+      navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } });
+      setLoadingFuture(false);
+    }, 3000);
+  }, [jobId, loadingFuture, navigate]);
+
+  useEffect(() => {
+    const handler = () => handleOpenMlPredictions();
+    window.addEventListener("mvp:open-projections", handler as EventListener);
+    return () => window.removeEventListener("mvp:open-projections", handler as EventListener);
+  }, [handleOpenMlPredictions]);
 
   const handleViewMore = async () => {
     if (!result || previewLimit >= 100) return;
@@ -370,9 +386,10 @@ export default function Mvp() {
                   variant="default"
                   size="lg"
                   className="w-full gap-2 bg-black hover:bg-black/90 text-white font-medium py-3"
-                  onClick={() => navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } })}
+                  onClick={handleOpenMlPredictions}
+                  disabled={loadingFuture}
                 >
-                  <Sparkles className="h-4 w-4" />
+                  {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                   Show ML Predictions
                 </Button>
                 <p className="text-xs text-muted-foreground text-center">
@@ -579,6 +596,16 @@ export default function Mvp() {
           </div>
         )}
       </main>
+      {loadingFuture && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center px-6">
+          <Card className="w-full max-w-md border-white/15 bg-zinc-900 text-white shadow-2xl">
+            <CardContent className="pt-8 pb-8 flex flex-col items-center gap-4">
+              <Loader2 className="h-10 w-10 animate-spin text-cyan-300" />
+              <p className="text-base font-semibold tracking-wide">Loading future projections</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 
