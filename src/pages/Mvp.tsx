@@ -458,10 +458,10 @@ export default function Mvp() {
 
             <section className="space-y-2">
               <h2 className="text-base font-semibold text-foreground">
-                Growth Between Runs
+                Median Depth Trend (Context Only)
               </h2>
               <p className="text-sm text-muted-foreground">
-                Depth % at each inspection ({prevYear} → {laterYear})
+                Individual anomaly growth varies significantly; see matches table for details.
               </p>
               {historicalVisualLoading ? (
                 <div className="flex items-center gap-2 rounded border border-border/80 bg-white p-8 text-sm text-muted-foreground">
