@@ -418,6 +418,7 @@ def api_pipeline_run(body: dict):
     }
     return {
         "status": "ok",
+        "job_id": job_id,
         "outputs": outputs,
         "preview": preview,
         "metrics": metrics,
@@ -471,7 +472,81 @@ def _allowed_job_filename(filename: str) -> bool:
     """Allow only safe filenames (no path traversal)."""
     if not filename or ".." in filename or "/" in filename or "\\" in filename:
         return False
-    return filename.endswith((".csv", ".json")) or filename == "output.xlsx"
+    return filename.endswith((".csv", ".json")) or filename in ("output.xlsx", "projections.xlsx")
+
+
+@app.post("/project")
+def project(body: dict):
+    """
+    Generate 2030/2040 projections from matched anomalies for a job.
+    Body: { "job_id": str, "target_years": [2030, 2040] }.
+    Uses matches CSV for that job; base_year is inferred from run.
+    Returns download_url and preview (first 20 rows of 2030).
+    """
+    job_id = body.get("job_id")
+    target_years = body.get("target_years")
+    if not job_id or not isinstance(job_id, str):
+        raise HTTPException(status_code=400, detail="job_id (string) is required")
+    if not target_years or not isinstance(target_years, list):
+        raise HTTPException(status_code=400, detail="target_years (list, e.g. [2030, 2040]) is required")
+    try:
+        target_years = [int(y) for y in target_years]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="target_years must be integers")
+    _validate_job_id(job_id)
+    tables_dir = JOBS_DIR / job_id / "tables"
+    if not tables_dir.exists():
+        raise HTTPException(status_code=404, detail="Job output not found; run pipeline first")
+    if str(PIPELINE_DIR) not in sys.path:
+        sys.path.insert(0, str(PIPELINE_DIR))
+    from src.project import compute_projections, load_matches_for_job
+    from export import write_projections_excel
+    matches_df, prev_year, later_year = load_matches_for_job(tables_dir)
+    if matches_df is None or len(matches_df) == 0:
+        raise HTTPException(status_code=422, detail="No matches found for this job")
+    base_year = later_year
+    projections_by_year = compute_projections(matches_df, base_year, target_years)
+    out_path = JOBS_DIR / job_id / "projections.xlsx"
+    write_projections_excel(projections_by_year, out_path)
+    preview_2030 = []
+    if 2030 in projections_by_year and len(projections_by_year[2030]) > 0:
+        df30 = projections_by_year[2030].head(20)
+        for _, row in df30.iterrows():
+            rec = {}
+            for k, v in row.items():
+                if hasattr(v, "item"):
+                    rec[k] = v.item()
+                elif isinstance(v, float) and v != v:
+                    rec[k] = None
+                else:
+                    rec[k] = v
+            preview_2030.append(rec)
+    download_url = f"/api/files/{job_id}/projections.xlsx"
+    return {
+        "download_url": download_url,
+        "preview": preview_2030,
+    }
+
+
+@app.get("/project/visual/{job_id}")
+def project_visual(job_id: str):
+    """
+    Time-series points per anomaly for trajectory chart.
+    Returns list of { anomaly_id, year, depth, growth_rate, flags }.
+    No aggregation; frontend builds lines and median.
+    """
+    _validate_job_id(job_id)
+    tables_dir = JOBS_DIR / job_id / "tables"
+    if not tables_dir.exists():
+        raise HTTPException(status_code=404, detail="Job output not found; run pipeline first")
+    if str(PIPELINE_DIR) not in sys.path:
+        sys.path.insert(0, str(PIPELINE_DIR))
+    from src.project import load_matches_for_job, build_visual_series
+    matches_df, prev_year, later_year = load_matches_for_job(tables_dir)
+    if matches_df is None or len(matches_df) == 0:
+        raise HTTPException(status_code=422, detail="No matches found for this job")
+    series = build_visual_series(matches_df, prev_year, later_year, [2030, 2040])
+    return {"points": series, "years": [prev_year, later_year, 2030, 2040]}
 
 
 @app.get("/api/files/{job_id}/{file_path:path}")

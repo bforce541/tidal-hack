@@ -77,6 +77,7 @@ export interface PipelineRunOutputs {
 
 export interface PipelineRunResponse {
   status: string;
+  job_id?: string;
   outputs: PipelineRunOutputs;
   preview: {
     matches_rows: Record<string, string | number | null>[];
@@ -89,6 +90,59 @@ export interface PipelineRunResponse {
     ambiguous: number;
     match_rate: number;
   };
+}
+
+export function projectUrl(): string {
+  return `${base().replace(/\/$/, "")}/project`;
+}
+
+export interface ProjectRequestBody {
+  job_id: string;
+  target_years: number[];
+}
+
+export interface ProjectResponse {
+  download_url: string;
+  preview: Record<string, string | number | null>[];
+}
+
+export async function requestProject(body: ProjectRequestBody): Promise<ProjectResponse> {
+  const res = await fetch(projectUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error((err as { detail?: string }).detail || "Projections failed");
+  }
+  return res.json();
+}
+
+export interface VisualPoint {
+  anomaly_id: string;
+  year: number;
+  depth: number;
+  growth_rate: number | null;
+  flags: string[];
+}
+
+export interface ProjectVisualResponse {
+  points: VisualPoint[];
+  years: number[];
+}
+
+export function projectVisualUrl(jobId: string): string {
+  return `${base().replace(/\/$/, "")}/project/visual/${jobId}`;
+}
+
+export async function fetchProjectVisual(jobId: string): Promise<ProjectVisualResponse> {
+  const res = await fetch(projectVisualUrl(jobId));
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error((err as { detail?: string }).detail || "Visual data failed");
+  }
+  return res.json();
 }
 
 export function pipelinePreviewUrl(limit: number, prevYear: number, laterYear: number): string {
