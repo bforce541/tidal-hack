@@ -44,7 +44,7 @@ export async function uploadFile(file: File): Promise<UploadResponse> {
   return res.json();
 }
 
-// Unified pipeline (single Run Pipeline button)
+// Unified pipeline (primary CTA: Analyze)
 export function pipelineRunUrl(): string {
   return `${base().replace(/\/$/, "")}/api/pipeline/run`;
 }
