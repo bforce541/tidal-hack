@@ -324,6 +324,17 @@ export default function Projections() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  <div className="rounded-md border border-border/80 overflow-hidden">
+                    <video
+                      src="/future-projections.mp4"
+                      controls
+                      className="w-full aspect-video"
+                      playsInline
+                      preload="metadata"
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                  </div>
                   <div className="rounded-md border bg-background p-3 max-w-xs">
                     <p className="text-xs text-muted-foreground uppercase tracking-wider">Mean depth (2030)</p>
                     <p className="text-xl font-mono font-semibold">
