@@ -49,7 +49,7 @@ const Index = () => {
         <section className="bg-[var(--bg)] border-b border-[var(--border)] py-20 px-6">
           <div className="max-w-3xl mx-auto">
             <div className="inline-flex items-center gap-1.5 border border-[var(--border)] px-2.5 py-1 text-[10px] font-mono text-[var(--text-muted)] mb-8 uppercase tracking-wider">
-              PIPELINE INTEGRITY WORKSTATION
+              PIPELINE INTEGRITY ANALYSIS
             </div>
 
             <h1 className="text-4xl md:text-5xl font-semibold tracking-tight text-[var(--text)] mb-6 leading-tight">
