@@ -3,6 +3,8 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProjectionsChart } from "@/components/analysis/ProjectionsChart";
+import { AgentDrawer } from "@/components/analysis/AgentDrawer";
+import { AnalysisProvider } from "@/context/AnalysisContext";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchProjectVisual, pipelineOutputUrl, requestProject } from "@/lib/api";
 import { ArrowLeft, Download, Loader2 } from "lucide-react";
@@ -66,46 +68,69 @@ export default function Projections() {
     };
   }, [points]);
 
-  if (!jobId) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
-        <Card className="max-w-md w-full">
-          <CardHeader>
-            <CardTitle>No job selected</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Open Future Projections from the Run Pipeline page after running the pipeline.
-            </p>
-            <Button asChild variant="default" className="gap-2">
-              <Link to="/mvp">
-                <ArrowLeft className="h-4 w-4" />
-                Back to Run Pipeline
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
-        <Card className="max-w-md w-full">
-          <CardContent className="pt-6 pb-6 flex flex-col items-center justify-center gap-4">
-            <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">Future Projections loading</p>
-            <p className="text-xs text-muted-foreground text-center">
-              Generating 2030 & 2040 projection data…
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return (
+  useEffect(() => {
+    const y2030Count = projectionRows.y2030.length;
+    const y2040Count = projectionRows.y2040.length;
+    const top2030 = projectionRows.y2030[0];
+    const top2040 = projectionRows.y2040[0];
+    window.dispatchEvent(new CustomEvent("mvp:state", {
+      detail: {
+        loading,
+        result: points ? { status: "ok" } : null,
+        projections: {
+          hasData: Boolean(points),
+          jobId,
+          years: points?.years ?? [],
+          count2030: y2030Count,
+          count2040: y2040Count,
+          top2030: top2030 ? {
+            anomaly_id: top2030.anomaly_id,
+            depth: top2030.depth,
+            growth_rate: top2030.growth_rate,
+            flags: top2030.flags,
+          } : null,
+          top2040: top2040 ? {
+            anomaly_id: top2040.anomaly_id,
+            depth: top2040.depth,
+            growth_rate: top2040.growth_rate,
+            flags: top2040.flags,
+          } : null,
+        },
+      },
+    }));
+  }, [jobId, loading, points, projectionRows.y2030, projectionRows.y2040]);
+  const content = !jobId ? (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+      <Card className="max-w-md w-full">
+        <CardHeader>
+          <CardTitle>No job selected</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Open Future Projections from the Run Pipeline page after running the pipeline.
+          </p>
+          <Button asChild variant="default" className="gap-2">
+            <Link to="/mvp">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Run Pipeline
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  ) : loading ? (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+      <Card className="max-w-md w-full">
+        <CardContent className="pt-6 pb-6 flex flex-col items-center justify-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+          <p className="text-sm font-medium text-foreground">Future Projections loading</p>
+          <p className="text-xs text-muted-foreground text-center">
+            Generating 2030 & 2040 projection data…
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  ) : (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card px-4 py-3 flex items-center gap-4">
         <Button variant="ghost" size="sm" asChild className="gap-1">
@@ -210,5 +235,25 @@ export default function Projections() {
         )}
       </main>
     </div>
+  );
+
+  return (
+    <AnalysisProvider>
+      <div className="min-h-screen bg-background flex">
+        <aside className="w-72 shrink-0 border-r bg-sidebar text-sidebar-foreground">
+          <div className="border-b border-sidebar-border px-4 py-3">
+            <p className="text-xs font-mono uppercase tracking-widest text-sidebar-foreground/60">
+              Piper
+            </p>
+          </div>
+          <div className="p-3">
+            <AgentDrawer />
+          </div>
+        </aside>
+        <main className="flex-1 min-w-0">
+          {content}
+        </main>
+      </div>
+    </AnalysisProvider>
   );
 }
