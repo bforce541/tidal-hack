@@ -4,33 +4,42 @@
 
 @layer base {
   :root {
-    --background: 0 0% 97%;
-    --foreground: 0 0% 9%;
+    /* Design tokens (accent navy #0B1F33, light theme) */
+    --bg: #ffffff;
+    --bg-muted: #fafafa;
+    --text: #0f172a;
+    --text-muted: #475569;
+    --border: #e5e7eb;
+    --accent-hex: #0b1f33;
+    --accent-soft: rgba(11, 31, 51, 0.08);
+
+    --background: 0 0% 100%;
+    --foreground: 215 25% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
+    --card-foreground: 215 25% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
+    --popover-foreground: 215 25% 11%;
 
-    --primary: 0 0% 12%;
+    --primary: 212 65% 12%;
     --primary-foreground: 0 0% 98%;
 
-    --secondary: 0 0% 93%;
-    --secondary-foreground: 0 0% 12%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 215 25% 11%;
 
-    --muted: 0 0% 94%;
-    --muted-foreground: 0 0% 42%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 215 16% 42%;
 
-    --accent: 174 42% 40%;
+    --accent: 212 65% 12%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 65% 48%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 88%;
-    --input: 0 0% 88%;
-    --ring: 174 42% 40%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 212 65% 25%;
 
     --radius: 0.125rem;
 
@@ -66,19 +75,19 @@
     --card-foreground: 0 0% 92%;
     --popover: 0 0% 9%;
     --popover-foreground: 0 0% 92%;
-    --primary: 174 42% 48%;
-    --primary-foreground: 0 0% 6%;
+    --primary: 212 65% 18%;
+    --primary-foreground: 0 0% 98%;
     --secondary: 0 0% 16%;
     --secondary-foreground: 0 0% 92%;
     --muted: 0 0% 14%;
     --muted-foreground: 0 0% 52%;
-    --accent: 174 42% 40%;
+    --accent: 212 65% 18%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 55% 35%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 18%;
     --input: 0 0% 18%;
-    --ring: 174 42% 40%;
+    --ring: 212 65% 30%;
     --sidebar-background: 0 0% 4%;
     --sidebar-foreground: 0 0% 72%;
     --sidebar-primary: 174 42% 48%;
@@ -86,7 +95,7 @@
     --sidebar-accent: 0 0% 12%;
     --sidebar-accent-foreground: 0 0% 88%;
     --sidebar-border: 0 0% 14%;
-    --sidebar-ring: 174 42% 40%;
+    --sidebar-ring: 212 65% 30%;
   }
 }
 
@@ -135,6 +144,48 @@
   .drop-zone:hover,
   .drop-zone-active {
     border-color: hsl(var(--accent));
-    background-color: hsl(var(--accent) / 0.04);
+    background-color: var(--accent-soft);
+  }
+
+  .focus-ring-accent:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgba(11, 31, 51, 0.25);
+  }
+
+  /* Landing page card hover (stats + capabilities only) */
+  .card-hover-accent {
+    @apply bg-white rounded-lg border border-border outline-none;
+    transition: background-color 200ms ease-out, border-color 200ms ease-out, transform 200ms ease-out, box-shadow 200ms ease-out;
+  }
+  .card-hover-accent:hover {
+    background-color: #0b1f33;
+    border-color: #0b1f33;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+  .card-hover-accent:hover .card-title {
+    color: #ffffff;
+  }
+  .card-hover-accent:hover .card-sub {
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .card-hover-accent:hover .card-icon,
+  .card-hover-accent:hover .card-icon-wrapper {
+    color: #ffffff;
+  }
+  .card-hover-accent:hover .card-icon-wrapper {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+  .card-hover-accent:focus-visible {
+    box-shadow: 0 0 0 2px rgba(11, 31, 51, 0.25);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card-hover-accent:hover {
+      transform: none;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .card-hover-accent:hover {
+      transform: translateY(-1px);
+    }
   }
 }

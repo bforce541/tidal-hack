@@ -95,7 +95,7 @@ export default function Projections() {
         <Card className="max-w-md w-full">
           <CardContent className="pt-6 pb-6 flex flex-col items-center justify-center gap-4">
             <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">Loading Future Projections</p>
+            <p className="text-sm font-medium text-foreground">Future Projections loading</p>
             <p className="text-xs text-muted-foreground text-center">
               Generating 2030 & 2040 projection data…
             </p>
