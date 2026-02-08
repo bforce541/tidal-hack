@@ -673,6 +673,42 @@ def project(body: dict):
     }
 
 
+@app.post("/project/ml")
+def project_ml(body: dict):
+    """
+    Optional ML-based projection for target years. Does not change /project or project.py.
+    Body: { "job_id": str, "target_years": [2030, 2040] (optional) }.
+    Returns ml_predictions, ml_model, ml_notes.
+    """
+    job_id = body.get("job_id")
+    target_years = body.get("target_years")
+    if not job_id or not isinstance(job_id, str):
+        raise HTTPException(status_code=400, detail="job_id (string) is required")
+    if target_years is None:
+        target_years = [2030, 2040]
+    if not isinstance(target_years, list):
+        raise HTTPException(status_code=400, detail="target_years must be a list (e.g. [2030, 2040])")
+    try:
+        target_years = [int(y) for y in target_years]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="target_years must be integers")
+    _validate_job_id(job_id)
+    tables_dir = JOBS_DIR / job_id / "tables"
+    if not tables_dir.exists():
+        raise HTTPException(status_code=404, detail="Job output not found; run pipeline first")
+    if str(PIPELINE_DIR) not in sys.path:
+        sys.path.insert(0, str(PIPELINE_DIR))
+    from src.project import load_matches_for_job
+    from src.ml_project import run_ml_projection
+    matches_df, _prev_year, later_year = load_matches_for_job(tables_dir)
+    if matches_df is None or len(matches_df) == 0:
+        raise HTTPException(status_code=400, detail="No matches found for this job; cannot run ML projection")
+    if later_year is None:
+        raise HTTPException(status_code=400, detail="Could not infer base year from job data")
+    out = run_ml_projection(matches_df, later_year, target_years)
+    return out
+
+
 @app.get("/project/visual/{job_id}")
 def project_visual(job_id: str):
     """

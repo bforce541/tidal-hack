@@ -32,7 +32,7 @@ import {
 } from "@/lib/api";
 import { HistoricalGrowthChart } from "@/components/analysis/HistoricalGrowthChart";
 import { ResultsTab } from "@/components/analysis/ResultsTab";
-import { Loader2, FileDown, ArrowLeft, Upload, ChevronDown } from "lucide-react";
+import { Loader2, FileDown, ArrowLeft, Upload, ChevronDown, Sparkles } from "lucide-react";
 import { AnalysisProvider } from "@/context/AnalysisContext";
 import { AgentDrawer } from "@/components/analysis/AgentDrawer";
 
@@ -382,21 +382,32 @@ export default function Mvp() {
             </Tabs>
             {resultRunAll.runs.some((r) => r.status === "ok") && (
               <div className="space-y-2 pt-4 border-t border-border/80">
-                <Button
-                  variant="default"
-                  size="lg"
-                  className="gap-2 bg-black hover:bg-black/90 text-white font-medium px-6 py-3"
-                  disabled={!jobId || loadingFuture}
-                  onClick={handleOpenFutureProjections}
-                >
-                  {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  View Future Projections (2030 / 2040)
-                </Button>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant="default"
+                    size="lg"
+                    className="gap-2 bg-black hover:bg-black/90 text-white font-medium px-6 py-3"
+                    disabled={!jobId || loadingFuture}
+                    onClick={handleOpenFutureProjections}
+                  >
+                    {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    View Future Projections (2030 / 2040)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="gap-2 font-medium px-6 py-3"
+                    disabled={!jobId}
+                    onClick={() => jobId && navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } })}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Show ML Predictions
+                  </Button>
+                </div>
               </div>
             )}
           </div>
         )}
-
         {success && result && (
           <div className="space-y-6">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -536,16 +547,28 @@ export default function Mvp() {
             </Card>
 
             <div className="space-y-2">
-              <Button
-                variant="default"
-                size="lg"
-                className="gap-2 bg-black hover:bg-black/90 text-white font-medium px-6 py-3"
-                disabled={!jobId || loadingFuture}
-                onClick={handleOpenFutureProjections}
-              >
-                {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                View Future Projections (2030 / 2040)
-              </Button>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="default"
+                  size="lg"
+                  className="gap-2 bg-black hover:bg-black/90 text-white font-medium px-6 py-3"
+                  disabled={!jobId || loadingFuture}
+                  onClick={handleOpenFutureProjections}
+                >
+                  {loadingFuture ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  View Future Projections (2030 / 2040)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="gap-2 font-medium px-6 py-3"
+                  disabled={!jobId}
+                  onClick={() => jobId && navigate("/mvp/projections", { state: { jobId, autoLoadMl: true } })}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Show ML Predictions
+                </Button>
+              </div>
             </div>
 
             <Card className="border border-border/80 bg-card shadow-sm">
