@@ -76,6 +76,19 @@ export default function Mvp() {
 
   const runsList = runs === "2007,2015" ? [2007, 2015] : [2015, 2022];
   const [prevYear, laterYear] = runsList[0] < runsList[1] ? [runsList[0], runsList[1]] : [runsList[1], runsList[0]];
+  const success = result?.status === "ok" && result.outputs;
+  const jobId = result?.job_id ?? null;
+  const matchesRows = result?.preview?.matches_rows ?? [];
+  const summaryText = result?.preview?.summary_text ?? "";
+  const preferredCols = matchesRows.length > 0
+    ? PREFERRED_MATCH_COLUMNS.filter((c) => c in (matchesRows[0] || {}))
+    : [];
+  const columns =
+    preferredCols.length > 0
+      ? preferredCols
+      : matchesRows.length > 0 && matchesRows[0]
+        ? Object.keys(matchesRows[0])
+        : [];
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("mvp:state", {
@@ -141,6 +154,21 @@ export default function Mvp() {
     return () => window.removeEventListener("mvp:run", handler as EventListener);
   }, [handleRun]);
 
+  const handleOpenFutureProjections = useCallback(() => {
+    if (!jobId || loadingFuture) return;
+    setLoadingFuture(true);
+    window.setTimeout(() => {
+      navigate("/mvp/projections", { state: { jobId } });
+      setLoadingFuture(false);
+    }, 3000);
+  }, [jobId, loadingFuture, navigate]);
+
+  useEffect(() => {
+    const handler = () => handleOpenFutureProjections();
+    window.addEventListener("mvp:open-projections", handler as EventListener);
+    return () => window.removeEventListener("mvp:open-projections", handler as EventListener);
+  }, [handleOpenFutureProjections]);
+
   const handleViewMore = async () => {
     if (!result || previewLimit >= 100) return;
     setLoadingMore(true);
@@ -156,29 +184,6 @@ export default function Mvp() {
       setLoadingMore(false);
     }
   };
-
-  const handleOpenFutureProjections = () => {
-    if (!jobId || loadingFuture) return;
-    setLoadingFuture(true);
-    window.setTimeout(() => {
-      navigate("/mvp/projections", { state: { jobId } });
-      setLoadingFuture(false);
-    }, 3000);
-  };
-
-  const success = result?.status === "ok" && result.outputs;
-  const jobId = result?.job_id ?? null;
-  const matchesRows = result?.preview?.matches_rows ?? [];
-  const summaryText = result?.preview?.summary_text ?? "";
-  const preferredCols = matchesRows.length > 0
-    ? PREFERRED_MATCH_COLUMNS.filter((c) => c in (matchesRows[0] || {}))
-    : [];
-  const columns =
-    preferredCols.length > 0
-      ? preferredCols
-      : matchesRows.length > 0 && matchesRows[0]
-        ? Object.keys(matchesRows[0])
-        : [];
 
   const content = (
     <div className="min-h-screen bg-background flex flex-col">
