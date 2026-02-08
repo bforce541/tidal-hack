@@ -649,7 +649,7 @@ export function AgentDrawer() {
       </SheetTrigger>
       <SheetContent side="left" className="w-[1300px] overflow-hidden">
         <SheetHeader>
-          <SheetTitle className="text-sm font-mono uppercase tracking-wider">Analysis Agent</SheetTitle>
+          <SheetTitle className="text-sm font-mono uppercase tracking-wider">Piper</SheetTitle>
         </SheetHeader>
         <SheetClose className="sr-only" data-agent-close>Close</SheetClose>
 
