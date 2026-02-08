@@ -49,6 +49,10 @@ export function pipelineRunUrl(): string {
   return `${base().replace(/\/$/, "")}/api/pipeline/run`;
 }
 
+export function pipelineRunAllUrl(): string {
+  return `${base().replace(/\/$/, "")}/api/pipeline/run-all`;
+}
+
 export function pipelineFileUrl(jobId: string, relativePath: string): string {
   const path = relativePath.startsWith("/") ? relativePath.slice(1) : relativePath;
   return `${base().replace(/\/$/, "")}/api/files/${jobId}/${path}`;
@@ -158,6 +162,46 @@ export async function runPipeline(body: PipelineRunBody): Promise<PipelineRunRes
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error((err as { detail?: string }).detail || "Pipeline failed");
+  }
+  return res.json();
+}
+
+export interface PipelineRunAllBody {
+  inputPath: string;
+  debug?: boolean;
+}
+
+export interface PipelineRunAllResponse {
+  status: string;
+  runs: {
+    pair: number[];
+    status: string;
+    job_id?: string;
+    outputs?: PipelineRunOutputs & { comparison_csv?: string };
+    preview?: { matches_rows: Record<string, string | number | null>[]; summary_text: string };
+    metrics?: PipelineRunResponse["metrics"];
+    detail?: string;
+  }[];
+  continued_outputs: {
+    continued_txt?: string;
+    continued_csv?: string;
+    continued_xlsx?: string;
+  };
+  continued_preview?: {
+    continued_rows: Record<string, string | number | null>[];
+    continued_text: string;
+  };
+}
+
+export async function runPipelineAll(body: PipelineRunAllBody): Promise<PipelineRunAllResponse> {
+  const res = await fetch(pipelineRunAllUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error((err as { detail?: string }).detail || "Run all failed");
   }
   return res.json();
 }
