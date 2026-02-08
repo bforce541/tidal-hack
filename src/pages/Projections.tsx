@@ -411,18 +411,25 @@ export default function Projections() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {videoOpen ? (
-                    <ProjectionsVideoPlayer
-                      key={videoSessionKey}
-                      src="/future-projections.mp4"
-                      trimEndSeconds={2.24}
-                      yearJumps={[
-                        { year: 2007, seconds: 0.7 },
-                        { year: 2015, seconds: 2.7 },
-                        { year: 2022, seconds: 4.7 },
-                        { year: 2030, seconds: 6.7 },
-                      ]}
-                      autoPreview
-                    />
+                    <div className="space-y-1">
+                      <ProjectionsVideoPlayer
+                        key={videoSessionKey}
+                        src="/future-projections.mp4"
+                        trimEndSeconds={2.24}
+                        yearJumps={[
+                          { year: 2007, seconds: 0.7 },
+                          { year: 2015, seconds: 2.7 },
+                          { year: 2022, seconds: 4.7 },
+                          { year: 2030, seconds: 6.7 },
+                        ]}
+                        autoPreview
+                      />
+                      <div className="flex justify-end">
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                          Powered by Gemini
+                        </span>
+                      </div>
+                    </div>
                   ) : (
                     <div className="rounded-md border border-border/80 bg-background p-3">
                       <p className="text-sm text-muted-foreground">
