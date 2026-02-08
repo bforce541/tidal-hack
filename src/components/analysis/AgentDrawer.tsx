@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, MessageSquare, Mic, MicOff, Sparkles } from 'lucide-react';
+import { Bot, MessageSquare, Mic, MicOff } from 'lucide-react';
 import { useAnalysis } from '@/context/AnalysisContext';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
@@ -43,24 +43,33 @@ type MvpState = {
     matched_preview?: Record<string, unknown>[];
     exceptions_preview?: Record<string, unknown>[];
   } | null;
+  projections?: {
+    hasData?: boolean;
+    jobId?: string;
+    years?: number[];
+    count2030?: number;
+    count2040?: number;
+    top2030?: {
+      anomaly_id?: string;
+      depth?: number;
+      growth_rate?: number | null;
+      flags?: string[];
+    } | null;
+    top2040?: {
+      anomaly_id?: string;
+      depth?: number;
+      growth_rate?: number | null;
+      flags?: string[];
+    } | null;
+  };
 };
-
-const SUGGESTED = [
-  'What step am I on?',
-  'Summarize the data status.',
-  'What should I do next?',
-  'What does this page show?',
-  'How many runs are loaded?',
-];
 
 export function AgentDrawer() {
   const { state, dispatch, runAlignment, runMatching, runGrowthAnalysis } = useAnalysis();
   const [isThinking, setIsThinking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [lastProvider, setLastProvider] = useState<'featherless' | 'custom' | 'fallback'>('fallback');
   const [lastError, setLastError] = useState<string | null>(null);
-  const [resolvedModel, setResolvedModel] = useState<string | null>(null);
   const [mvpState, setMvpState] = useState<MvpState | null>(null);
   const lastIntentRef = useRef<'mvp-analyze' | null>(null);
   const lastMvpJobRef = useRef<string | null>(null);
@@ -126,9 +135,12 @@ export function AgentDrawer() {
     const q = raw.trim().toLowerCase();
     const hasData = summary.runCount > 0;
     const onMvp = window.location.pathname.includes('/mvp');
+    const onProjections = window.location.pathname.includes('/mvp/projections');
     const mvpMetrics = mvpState?.result?.metrics;
     const mvpMatchRate = mvpMetrics?.match_rate ?? 0;
     const mvpHasResults = Boolean(mvpState?.result && !mvpState?.result?.error && mvpState?.result?.status === 'ok');
+    const projectionData = mvpState?.projections;
+    const hasProjectionData = Boolean(projectionData?.hasData);
     const stepLine = `You're on step ${state.step + 1}/${STEPS.length}: ${summary.step}.`;
     const nextLine = summary.nextStep ? `Next step: ${summary.nextStep}.` : 'This is the final step.';
 
@@ -156,6 +168,10 @@ export function AgentDrawer() {
     }
 
     if (q.includes('data') || q.includes('run') || q.includes('dataset')) {
+      if (onProjections) {
+        if (!hasProjectionData) return 'Future projection data is not loaded yet on this page.';
+        return `Future projections are loaded. Rows: ${projectionData?.count2030 ?? 0} for 2030 and ${projectionData?.count2040 ?? 0} for 2040.`;
+      }
       if (onMvp) {
         if (!mvpHasResults) return 'No MVP results yet. Upload a file and run the MVP.';
         return `MVP results are ready. Match rate: ${mvpMatchRate}%. Matched: ${mvpMetrics?.matched ?? 0}, new/unmatched: ${mvpMetrics?.new_or_unmatched ?? 0}, missing: ${mvpMetrics?.missing ?? 0}, ambiguous: ${mvpMetrics?.ambiguous ?? 0}.`;
@@ -170,6 +186,19 @@ export function AgentDrawer() {
       const download = mvpState?.result?.outputs?.matches_csv ? 'Downloads are available in the Downloads section.' : 'Downloads not ready yet.';
       const summaryText = mvpState?.result?.preview?.summary_text ? 'Summary text is available below.' : 'Summary text not available.';
       return `MVP summary: match rate ${mvpMatchRate}%. Matched ${mvpMetrics?.matched ?? 0}, new/unmatched ${mvpMetrics?.new_or_unmatched ?? 0}, missing ${mvpMetrics?.missing ?? 0}, ambiguous ${mvpMetrics?.ambiguous ?? 0}. ${download} ${summaryText}`;
+    }
+
+    if (onProjections && (q.includes('future') || q.includes('projection') || q.includes('2030') || q.includes('2040') || q.includes('explain') || q.includes('result'))) {
+      if (!hasProjectionData) return 'Future projections are not available yet. Open this page after MVP finishes and loads projection data.';
+      const top2030 = projectionData?.top2030;
+      const top2040 = projectionData?.top2040;
+      const top2030Line = top2030
+        ? `Top 2030 anomaly: ${top2030.anomaly_id ?? 'N/A'} at depth ${top2030.depth ?? 0}%.`
+        : 'No top 2030 anomaly available.';
+      const top2040Line = top2040
+        ? `Top 2040 anomaly: ${top2040.anomaly_id ?? 'N/A'} at depth ${top2040.depth ?? 0}%.`
+        : 'No top 2040 anomaly available.';
+      return `This page shows future anomaly projections. Row counts: 2030 = ${projectionData?.count2030 ?? 0}, 2040 = ${projectionData?.count2040 ?? 0}. ${top2030Line} ${top2040Line}`;
     }
 
     if (q.includes('page') || q.includes('screen') || q.includes('view') || q.includes('where am')) {
@@ -275,13 +304,16 @@ export function AgentDrawer() {
   const featherlessKey = (import.meta.env.VITE_FEATHERLESS_API_KEY as string | undefined) || '';
   const featherlessModel =
     (import.meta.env.VITE_FEATHERLESS_MODEL as string | undefined) || 'TeichAI/Nemotron-Orchestrator-8B-DeepSeek-v3.2-Speciale-Distill';
-  const featherlessKeyInfo = featherlessKey ? `present (${featherlessKey.length} chars)` : 'missing';
   const elevenKey = (import.meta.env.VITE_ELEVENLABS_API_KEY as string | undefined) || '';
   const elevenVoiceId = (import.meta.env.VITE_ELEVENLABS_VOICE_ID as string | undefined) || '';
   const elevenModel = (import.meta.env.VITE_ELEVENLABS_MODEL as string | undefined) || 'eleven_multilingual_v2';
 
   const buildContext = () => ({
-    page: window.location.pathname.includes('/mvp') ? 'MVP' : 'Analysis',
+    page: window.location.pathname.includes('/mvp/projections')
+      ? 'Future Projections'
+      : window.location.pathname.includes('/mvp')
+        ? 'MVP'
+        : 'Analysis',
     stepIndex: state.step,
     stepLabel: summary.step,
     isProcessing: summary.isProcessing,
@@ -357,6 +389,9 @@ export function AgentDrawer() {
       mvpState?.result?.metrics
         ? `MVP SUMMARY: match rate ${mvpState.result.metrics.match_rate ?? 0}%, matched ${mvpState.result.metrics.matched ?? 0}, new/unmatched ${mvpState.result.metrics.new_or_unmatched ?? 0}, missing ${mvpState.result.metrics.missing ?? 0}, ambiguous ${mvpState.result.metrics.ambiguous ?? 0}`
         : 'MVP SUMMARY: none',
+      mvpState?.projections?.hasData
+        ? `FUTURE PROJECTIONS: 2030 rows ${mvpState.projections.count2030 ?? 0}, 2040 rows ${mvpState.projections.count2040 ?? 0}`
+        : 'FUTURE PROJECTIONS: none',
     ].join('\n');
   };
 
@@ -438,7 +473,6 @@ export function AgentDrawer() {
       const selectedModel = modelIds && !modelIds.includes(featherlessModel)
         ? pickBestModelId(modelIds) || featherlessModel
         : featherlessModel;
-      setResolvedModel(selectedModel);
 
       const res = await fetch('https://api.featherless.ai/v1/chat/completions', {
         method: 'POST',
@@ -617,11 +651,6 @@ export function AgentDrawer() {
     if (!response) {
       response = cleanTranscript(answerQuestion(value));
     }
-    if (remote) {
-      setLastProvider(apiUrl ? 'custom' : 'featherless');
-    } else {
-      setLastProvider('fallback');
-    }
     setMessages(prev => prev.map(m => (m.id === agentId ? { ...m, content: response, status: 'done' } : m)));
     setIsThinking(false);
     if (shouldSpeakRef.current) {
@@ -642,76 +671,36 @@ export function AgentDrawer() {
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button variant="accent" size="sm" className="w-full h-7 text-2xs font-mono uppercase tracking-wider shadow-sm">
-          <Bot className="h-3 w-3" />
-          Agent
+        <Button
+          variant="accent"
+          size="sm"
+          className="w-full h-[30vh] min-h-[180px] max-h-[260px] rounded-xl border-2 border-white/35 bg-[radial-gradient(circle_at_20%_20%,hsl(var(--accent)/0.88),hsl(var(--accent))_38%,hsl(214_72%_7%)_100%)] px-4 text-[12px] font-mono uppercase tracking-[0.24em] shadow-[0_16px_36px_hsl(var(--accent)/0.38),inset_0_0_0_1px_rgba(255,255,255,0.08),inset_0_-22px_44px_rgba(255,255,255,0.06)] hover:brightness-110"
+        >
+          <div className="flex h-full w-full flex-col items-start justify-between py-3">
+            <div className="flex items-center gap-2">
+              <div className="rounded-md border border-white/35 bg-white/15 p-1.5 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
+                <Bot className="h-5 w-5" />
+              </div>
+              <span className="text-[13px] font-semibold tracking-[0.28em] text-white">Piper</span>
+            </div>
+            <div className="space-y-1 text-left">
+              <p className="text-[12px] font-semibold tracking-[0.2em] text-white">Agent</p>
+              <p className="text-[10px] text-white/90 tracking-[0.14em]">Voice Assistant</p>
+              <p className="text-[10px] text-white/80 tracking-[0.14em]">Tap to Open</p>
+            </div>
+          </div>
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-[1300px] overflow-hidden">
-        <SheetHeader>
-          <SheetTitle className="text-sm font-mono uppercase tracking-wider">Piper</SheetTitle>
+      <SheetContent side="left" className="w-[1300px] overflow-hidden border-r border-accent/20 bg-gradient-to-b from-background via-background to-accent/5">
+        <SheetHeader className="border-b border-accent/15 pb-4">
+          <SheetTitle className="text-sm font-mono uppercase tracking-[0.28em] text-foreground">Piper</SheetTitle>
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-muted-foreground">Voice Assistant</p>
         </SheetHeader>
         <SheetClose className="sr-only" data-agent-close>Close</SheetClose>
 
         <div className="mt-4 space-y-4 h-full flex flex-col pb-14">
-          <div className="border bg-card">
-            <div className="border-b px-3 py-1.5 bg-muted/30 flex items-center gap-2">
-              <Sparkles className="h-3 w-3 text-accent" />
-              <span className="text-2xs font-mono uppercase tracking-wider text-muted-foreground">Status</span>
-            </div>
-            <div className="p-3 grid grid-cols-2 gap-3 text-2xs">
-              <div>
-                <p className="text-muted-foreground">Current Step</p>
-                <p className="font-mono text-foreground">{summary.step}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Runs</p>
-                <p className="font-mono text-foreground">{summary.runCount}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Matches</p>
-                <p className="font-mono text-foreground">{summary.matches}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Exceptions</p>
-                <p className="font-mono text-foreground">{summary.exceptions}</p>
-              </div>
-              <div className="col-span-2">
-                <p className="text-muted-foreground">Provider</p>
-                <p className="font-mono text-foreground uppercase">{lastProvider}</p>
-                <p className="text-2xs text-muted-foreground mt-1">
-                  Featherless key: {featherlessKeyInfo}
-                </p>
-                <p className="text-2xs text-muted-foreground mt-1">
-                  Model: {resolvedModel || featherlessModel}
-                </p>
-                <p className="text-2xs text-muted-foreground mt-1">
-                  ElevenLabs: {elevenKey ? 'key present' : 'key missing'} · {elevenVoiceId ? 'voice set' : 'voice missing'}
-                </p>
-                {lastError && <p className="text-2xs text-destructive mt-1">Error: {lastError}</p>}
-                {!featherlessKey && !apiUrl && (
-                  <p className="text-2xs text-destructive mt-1">Missing API key. Using fallback.</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-2xs font-mono uppercase tracking-wider text-muted-foreground">Suggested</p>
-            <div className="flex flex-wrap gap-2">
-              {SUGGESTED.map(item => (
-                <div
-                  key={item}
-                  className="h-7 px-3 border border-input bg-background text-2xs font-mono uppercase tracking-wider text-muted-foreground flex items-center"
-                >
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-
           <form
-            className="border bg-card p-3 sticky top-0 z-10"
+            className="border border-accent/20 bg-card/80 backdrop-blur-sm p-3 sticky top-0 z-10 rounded-md"
             onSubmit={(event) => {
               event.preventDefault();
             }}
@@ -760,12 +749,13 @@ export function AgentDrawer() {
                 </Button>
               </div>
             </div>
+            {lastError && <p className="text-2xs text-destructive mt-2">Error: {lastError}</p>}
           </form>
 
-          <div className="flex-1 border bg-card overflow-auto mb-6">
-            <div className="border-b px-3 py-1.5 bg-muted/30 flex items-center gap-2">
+          <div className="flex-1 border border-accent/20 bg-card/90 overflow-auto mb-6 rounded-md shadow-[0_10px_30px_rgba(2,6,23,0.08)]">
+            <div className="border-b border-accent/15 px-3 py-2 bg-muted/20 flex items-center gap-2">
               <MessageSquare className="h-3 w-3 text-accent" />
-              <span className="text-2xs font-mono uppercase tracking-wider text-muted-foreground">Conversation</span>
+              <span className="text-2xs font-mono uppercase tracking-[0.18em] text-muted-foreground">Conversation</span>
             </div>
             <div ref={scrollRef} className="p-3 space-y-3 max-h-[48vh] overflow-auto">
               {messages.map((msg, idx) => {
