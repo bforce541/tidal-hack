@@ -1,0 +1,714 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Bot, MessageSquare, Mic, MicOff, Sparkles } from 'lucide-react';
+import { useAnalysis } from '@/context/AnalysisContext';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { cn } from '@/lib/utils';
+
+const STEPS = ['Upload', 'Alignment', 'Matching', 'Growth', 'Export'];
+
+type Message = {
+  id: string;
+  role: 'user' | 'agent';
+  content: string;
+  status?: 'pending' | 'error' | 'done';
+  attempts?: number;
+};
+
+const SUGGESTED = [
+  'What step am I on?',
+  'Summarize the data status.',
+  'What should I do next?',
+  'What does this page show?',
+  'How many runs are loaded?',
+];
+
+export function AgentDrawer() {
+  const { state, dispatch, runAlignment, runMatching, runGrowthAnalysis } = useAnalysis();
+  const [isThinking, setIsThinking] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [lastProvider, setLastProvider] = useState<'featherless' | 'custom' | 'fallback'>('fallback');
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [resolvedModel, setResolvedModel] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const shouldSpeakRef = useRef(false);
+  const modelCache = useRef<string[] | null>(null);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: 'welcome',
+      role: 'agent',
+      content: 'Ask me about the data, this page, or the current step.',
+    },
+  ]);
+
+  const summary = useMemo(() => {
+    const step = STEPS[state.step] ?? 'Upload';
+    const nextStep = STEPS[state.step + 1];
+    const runNames = state.runs.map(r => r.name).filter(Boolean);
+    return {
+      step,
+      nextStep,
+      runCount: state.runs.length,
+      runNames,
+      alignments: state.alignments.length,
+      matches: state.matchedGroups.length,
+      growth: state.growthResults.length,
+      exceptions: state.exceptions.length,
+      hasMetrics: state.qualityMetrics != null,
+      isProcessing: state.isProcessing,
+    };
+  }, [
+    state.alignments.length,
+    state.exceptions.length,
+    state.growthResults.length,
+    state.isProcessing,
+    state.matchedGroups.length,
+    state.qualityMetrics,
+    state.runs,
+    state.step,
+  ]);
+
+  const answerQuestion = (raw: string) => {
+    const q = raw.trim().toLowerCase();
+    const hasData = summary.runCount > 0;
+    const stepLine = `You're on step ${state.step + 1}/${STEPS.length}: ${summary.step}.`;
+    const nextLine = summary.nextStep ? `Next step: ${summary.nextStep}.` : 'This is the final step.';
+
+    if (q.includes('step') || q.includes('current')) {
+      return `${stepLine} ${nextLine}`;
+    }
+
+    if (q.includes('next') || q.includes('do now') || q.includes('what should')) {
+      if (summary.isProcessing) {
+        return 'Processing is running. Wait for the current step to finish, then continue.';
+      }
+      if (!hasData) {
+        return 'Upload ILI runs first. Use the Upload step to import your files.';
+      }
+      if (summary.alignments === 0) {
+        return 'Run alignment to compute drift correction and anchor matches.';
+      }
+      if (summary.matches === 0) {
+        return 'Run matching to connect anomalies across runs.';
+      }
+      if (summary.growth === 0) {
+        return 'Run growth analysis to compute rates and exceptions.';
+      }
+      return 'Review results and export the report in the Export step.';
+    }
+
+    if (q.includes('data') || q.includes('run') || q.includes('dataset')) {
+      if (!hasData) return 'No runs loaded yet. Upload files or load the example dataset.';
+      const names = summary.runNames.length > 0 ? `Runs: ${summary.runNames.join(', ')}.` : 'Runs are loaded.';
+      return `Loaded ${summary.runCount} run(s). ${names}`;
+    }
+
+    if (q.includes('page') || q.includes('screen') || q.includes('view') || q.includes('where am')) {
+      return 'This is the Analysis workspace. The left sidebar shows steps and run status; the main panel shows the active step output and actions.';
+    }
+
+    if (q.includes('alignment') || q.includes('align')) {
+      if (summary.alignments === 0) {
+        return 'No alignment results yet. Run alignment after at least two runs are loaded.';
+      }
+      return `Alignment results are available for ${summary.alignments} run pair(s).`;
+    }
+
+    if (q.includes('match')) {
+      if (summary.matches === 0) return 'No match results yet. Run matching after alignment.';
+      return `${summary.matches} matched anomaly groups are available.`;
+    }
+
+    if (q.includes('growth') || q.includes('exception')) {
+      if (summary.growth === 0) return 'No growth results yet. Run growth analysis after matching.';
+      return `Growth results: ${summary.growth} records, ${summary.exceptions} exception(s).`;
+    }
+
+    if (q.includes('stats') || q.includes('metrics') || q.includes('quality')) {
+      if (!summary.hasMetrics) return 'Quality metrics will appear after growth analysis.';
+      return 'Quality metrics are available in the sidebar stats panel.';
+    }
+
+    return 'I can answer questions about the data, this page, or the current step. Try asking about runs, alignment, matching, growth, or what to do next.';
+  };
+
+  const runCommand = (raw: string) => {
+    const q = raw.trim().toLowerCase();
+    const runAlign = /run\s+(the\s+)?alignment|start\s+(the\s+)?alignment|align\s+runs/;
+    const runMatch = /run\s+(the\s+)?matching|start\s+(the\s+)?matching|match\s+anomalies/;
+    const runGrowth = /run\s+(the\s+)?growth|start\s+(the\s+)?growth|growth\s+analysis/;
+    if (runAlign.test(q)) {
+      runAlignment();
+      return 'Running alignment now.';
+    }
+    if (runMatch.test(q)) {
+      runMatching();
+      return 'Running matching now.';
+    }
+    if (runGrowth.test(q)) {
+      runGrowthAnalysis();
+      return 'Running growth analysis now.';
+    }
+    if (q.includes('go to upload')) {
+      dispatch({ type: 'SET_STEP', step: 0 });
+      return 'Switched to Upload step.';
+    }
+    if (q.includes('go to alignment')) {
+      dispatch({ type: 'SET_STEP', step: 1 });
+      return 'Switched to Alignment step.';
+    }
+    if (q.includes('go to matching')) {
+      dispatch({ type: 'SET_STEP', step: 2 });
+      return 'Switched to Matching step.';
+    }
+    if (q.includes('go to growth')) {
+      dispatch({ type: 'SET_STEP', step: 3 });
+      return 'Switched to Growth step.';
+    }
+    if (q.includes('go to export')) {
+      dispatch({ type: 'SET_STEP', step: 4 });
+      return 'Switched to Export step.';
+    }
+    return null;
+  };
+
+  const apiUrl = (import.meta.env.VITE_AGENT_API_URL as string | undefined) || '';
+  const featherlessKey = (import.meta.env.VITE_FEATHERLESS_API_KEY as string | undefined) || '';
+  const featherlessModel =
+    (import.meta.env.VITE_FEATHERLESS_MODEL as string | undefined) || 'TeichAI/Nemotron-Orchestrator-8B-DeepSeek-v3.2-Speciale-Distill';
+  const featherlessKeyInfo = featherlessKey ? `present (${featherlessKey.length} chars)` : 'missing';
+  const elevenKey = (import.meta.env.VITE_ELEVENLABS_API_KEY as string | undefined) || '';
+  const elevenVoiceId = (import.meta.env.VITE_ELEVENLABS_VOICE_ID as string | undefined) || '';
+  const elevenModel = (import.meta.env.VITE_ELEVENLABS_MODEL as string | undefined) || 'eleven_multilingual_v2';
+
+  const buildContext = () => ({
+    page: 'Analysis',
+    stepIndex: state.step,
+    stepLabel: summary.step,
+    isProcessing: summary.isProcessing,
+    runs: state.runs.map(r => ({
+      id: r.id,
+      name: r.name,
+      date: r.date,
+      fileName: r.fileName,
+      units: r.units,
+      featureCount: r.features.length,
+      validationErrors: r.validationErrors.length,
+      validationWarnings: r.validationWarnings.length,
+    })),
+    counts: {
+      runs: summary.runCount,
+      alignments: summary.alignments,
+      matches: summary.matches,
+      growth: summary.growth,
+      exceptions: summary.exceptions,
+    },
+    qualityMetrics: state.qualityMetrics,
+    settings: state.settings,
+  });
+
+  const buildContextSummary = () => {
+    const alignmentSummary = state.alignments.map(a => ({
+      runAId: a.runAId,
+      runBId: a.runBId,
+      anchors: a.anchorMatches.length,
+      avgDriftError: a.quality.avgDriftError,
+      maxDrift: a.quality.maxDrift,
+      coverage: a.quality.coverage,
+      score: a.quality.score,
+    }));
+
+    const confidenceCounts = state.matchedGroups.reduce(
+      (acc, g) => {
+        acc[g.confidence] = (acc[g.confidence] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    const exceptionCounts = state.exceptions.reduce(
+      (acc, e) => {
+        acc[e.type] = (acc[e.type] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    const sampleMatches = state.matchedGroups.slice(0, 3).map(g => ({
+      id: g.group_id,
+      confidence: g.confidence,
+      score: g.score,
+      explanation: g.explanation,
+    }));
+
+    return [
+      `STEP: ${summary.step} (${state.step + 1}/${STEPS.length})`,
+      `RUNS: ${summary.runCount} (${summary.runNames.join(', ') || 'unnamed'})`,
+      `ALIGNMENTS: ${summary.alignments}`,
+      `MATCHES: ${summary.matches} (HIGH ${confidenceCounts.HIGH || 0}, MED ${confidenceCounts.MED || 0}, LOW ${confidenceCounts.LOW || 0}, UNCERTAIN ${confidenceCounts.UNCERTAIN || 0})`,
+      `GROWTH RESULTS: ${summary.growth}`,
+      `EXCEPTIONS: ${summary.exceptions} (${Object.entries(exceptionCounts).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'})`,
+      alignmentSummary.length > 0
+        ? `ALIGNMENT METRICS (first pair): anchors ${alignmentSummary[0].anchors}, avg drift ${alignmentSummary[0].avgDriftError.toFixed(2)} ft, max drift ${alignmentSummary[0].maxDrift.toFixed(2)} ft, coverage ${(alignmentSummary[0].coverage * 100).toFixed(0)}%, score ${alignmentSummary[0].score.toFixed(3)}`
+        : 'ALIGNMENT METRICS: none',
+      sampleMatches.length > 0
+        ? `SAMPLE MATCHES: ${sampleMatches.map(m => `${m.id} ${m.confidence} ${m.score.toFixed(3)}`).join(' | ')}`
+        : 'SAMPLE MATCHES: none',
+    ].join('\n');
+  };
+
+  const resolveModelId = async () => {
+    if (modelCache.current) return modelCache.current;
+    if (!featherlessKey) return null;
+    try {
+      const res = await fetch('https://api.featherless.ai/v1/models?available_on_current_plan=true', {
+        headers: { Authorization: `Bearer ${featherlessKey}` },
+      });
+      if (!res.ok) throw new Error('Model list request failed');
+      const data = await res.json();
+      const ids = Array.isArray(data?.data) ? data.data.map((m: { id: string }) => m.id).filter(Boolean) : [];
+      modelCache.current = ids;
+      return ids;
+    } catch {
+      return null;
+    }
+  };
+
+  const pickBestModelId = (ids: string[]) => {
+    const preferred = [
+      /qwen.*2\.5.*7b/i,
+      /qwen.*7b/i,
+      /teichai\/nemotron-orchestrator-8b-deepseek-v3\.2-speciale-distill/i,
+      /teichai\/qwen3-8b-deepseek-v3\.2-speciale-distill/i,
+      /deepseek.*v3\.2/i,
+      /deepseek.*v3/i,
+      /deepseek.*r1/i,
+    ];
+    for (const re of preferred) {
+      const found = ids.find(id => re.test(id));
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const sendToAgent = async (text: string) => {
+    if (!apiUrl && !featherlessKey) return null;
+    const history = messages
+      .filter(m => m.id !== 'welcome')
+      .slice(-2)
+      .map(m => ({ role: m.role === 'agent' ? 'assistant' : 'user', content: m.content }));
+    const context = buildContext();
+    const contextSummary = buildContextSummary();
+    try {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+
+      if (apiUrl) {
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: text,
+            context,
+            history,
+          }),
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error('Agent request failed');
+        const data = await res.json();
+        window.clearTimeout(timeoutId);
+        if (typeof data?.answer === 'string') return data.answer;
+        return null;
+      }
+
+      const system = [
+        'You are an expert assistant for a pipeline ILI alignment app.',
+        'Answer questions about data, current page, steps, and what happened so far.',
+        'Always include concrete numbers from context when available.',
+        'If the question is about alignment, cite anchor count, drift error, coverage, and score if present.',
+        'If the question is about matching, cite match count and confidence breakdown.',
+        'If context lacks data, say exactly what is missing.',
+        `Context Summary:\n${contextSummary}`,
+      ].join('\n');
+
+      const modelIds = await resolveModelId();
+      const selectedModel = modelIds && !modelIds.includes(featherlessModel)
+        ? pickBestModelId(modelIds) || featherlessModel
+        : featherlessModel;
+      setResolvedModel(selectedModel);
+
+      const res = await fetch('https://api.featherless.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${featherlessKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          messages: [
+            { role: 'system', content: system },
+            ...history,
+            { role: 'user', content: text },
+          ],
+          temperature: 0.2,
+          top_p: 0.8,
+          max_tokens: 128,
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Agent request failed (${res.status}) ${body.slice(0, 200)}`);
+      }
+      const data = await res.json();
+      window.clearTimeout(timeoutId);
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof content === 'string' && content.trim()) return content;
+      return null;
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setLastError('Agent request timed out');
+        return null;
+      }
+      const message = err instanceof Error ? err.message : 'Agent request failed';
+      setLastError(message);
+      return null;
+    }
+  };
+
+  const cleanTranscript = (text: string) => (
+    text
+      .replace(/<think>[\s\S]*?<\/think>/gi, '')
+      .replace(/<\/?think>/gi, '')
+      .replace(/^\s*think[:\s-]*/i, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/[`_~]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+
+  const speakText = async (text: string) => {
+    if (!elevenKey || !elevenVoiceId) {
+      setLastError('ElevenLabs key or voice ID missing');
+      return;
+    }
+    const cleaned = cleanTranscript(text);
+    if (!cleaned) return;
+    try {
+      setIsSpeaking(true);
+      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${elevenVoiceId}?output_format=mp3_44100_128`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': elevenKey,
+        },
+        body: JSON.stringify({
+          text: cleaned,
+          model_id: elevenModel,
+          voice_settings: {
+            stability: 0.45,
+            similarity_boost: 0.65,
+            style: 0.2,
+            use_speaker_boost: true,
+          },
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`ElevenLabs TTS failed (${res.status}) ${body.slice(0, 200)}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        setIsSpeaking(false);
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        setIsSpeaking(false);
+      };
+      await audio.play();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'ElevenLabs TTS failed';
+      setLastError(message);
+      setIsSpeaking(false);
+    }
+  };
+
+  const startListening = () => {
+    const SpeechRecognitionImpl = (window as typeof window & {
+      webkitSpeechRecognition?: typeof SpeechRecognition;
+      SpeechRecognition?: typeof SpeechRecognition;
+    }).SpeechRecognition || (window as typeof window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionImpl) {
+      setLastError('SpeechRecognition not supported in this browser');
+      return;
+    }
+    setLastError(null);
+    const recognition = new SpeechRecognitionImpl();
+    recognition.lang = navigator.language || 'en-US';
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim();
+      if (transcript) {
+        void submit(transcript, { speak: true });
+      }
+    };
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    setIsListening(true);
+    recognition.start();
+  };
+
+  const stopListening = () => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
+  };
+
+  const submit = async (text?: string, options?: { speak?: boolean }) => {
+    const value = (text ?? '').trim();
+    if (!value) return;
+    const idBase = String(Date.now());
+    setMessages(prev => [
+      ...prev,
+      { id: `${idBase}-u`, role: 'user', content: value, status: 'done' },
+      { id: `${idBase}-a`, role: 'agent', content: '…', status: 'pending', attempts: 0 },
+    ]);
+    setIsThinking(true);
+    setLastError(null);
+    shouldSpeakRef.current = Boolean(options?.speak);
+
+    const commandResponse = runCommand(value);
+    if (commandResponse) {
+      const response = cleanTranscript(commandResponse);
+      const agentId = `${idBase}-a`;
+      setMessages(prev => prev.map(m => (m.id === agentId ? { ...m, content: response, status: 'done' } : m)));
+      setIsThinking(false);
+      if (shouldSpeakRef.current) {
+        void speakText(response);
+        shouldSpeakRef.current = false;
+      }
+      return;
+    }
+
+    const agentId = `${idBase}-a`;
+
+    let remote = await sendToAgent(value);
+    if (!remote) {
+      setMessages(prev => prev.map(m => (
+        m.id === agentId ? { ...m, content: 'Retrying…', status: 'pending', attempts: (m.attempts ?? 0) + 1 } : m
+      )));
+      remote = await sendToAgent(value);
+    }
+
+    let response = cleanTranscript(remote ?? answerQuestion(value));
+    if (!response) {
+      response = cleanTranscript(answerQuestion(value));
+    }
+    if (remote) {
+      setLastProvider(apiUrl ? 'custom' : 'featherless');
+    } else {
+      setLastProvider('fallback');
+    }
+    setMessages(prev => prev.map(m => (m.id === agentId ? { ...m, content: response, status: 'done' } : m)));
+    setIsThinking(false);
+    if (shouldSpeakRef.current) {
+      void speakText(response);
+      shouldSpeakRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    const el = scrollRef.current;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [messages, isThinking]);
+
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button variant="accent" size="sm" className="w-full h-7 text-2xs font-mono uppercase tracking-wider shadow-sm">
+          <Bot className="h-3 w-3" />
+          Agent
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-[1300px] overflow-hidden">
+        <SheetHeader>
+          <SheetTitle className="text-sm font-mono uppercase tracking-wider">Analysis Agent</SheetTitle>
+        </SheetHeader>
+
+        <div className="mt-4 space-y-4 h-full flex flex-col pb-14">
+          <div className="border bg-card">
+            <div className="border-b px-3 py-1.5 bg-muted/30 flex items-center gap-2">
+              <Sparkles className="h-3 w-3 text-accent" />
+              <span className="text-2xs font-mono uppercase tracking-wider text-muted-foreground">Status</span>
+            </div>
+            <div className="p-3 grid grid-cols-2 gap-3 text-2xs">
+              <div>
+                <p className="text-muted-foreground">Current Step</p>
+                <p className="font-mono text-foreground">{summary.step}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Runs</p>
+                <p className="font-mono text-foreground">{summary.runCount}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Matches</p>
+                <p className="font-mono text-foreground">{summary.matches}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Exceptions</p>
+                <p className="font-mono text-foreground">{summary.exceptions}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-muted-foreground">Provider</p>
+                <p className="font-mono text-foreground uppercase">{lastProvider}</p>
+                <p className="text-2xs text-muted-foreground mt-1">
+                  Featherless key: {featherlessKeyInfo}
+                </p>
+                <p className="text-2xs text-muted-foreground mt-1">
+                  Model: {resolvedModel || featherlessModel}
+                </p>
+                <p className="text-2xs text-muted-foreground mt-1">
+                  ElevenLabs: {elevenKey ? 'key present' : 'key missing'} · {elevenVoiceId ? 'voice set' : 'voice missing'}
+                </p>
+                {lastError && <p className="text-2xs text-destructive mt-1">Error: {lastError}</p>}
+                {!featherlessKey && !apiUrl && (
+                  <p className="text-2xs text-destructive mt-1">Missing API key. Using fallback.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-2xs font-mono uppercase tracking-wider text-muted-foreground">Suggested</p>
+            <div className="flex flex-wrap gap-2">
+              {SUGGESTED.map(item => (
+                <div
+                  key={item}
+                  className="h-7 px-3 border border-input bg-background text-2xs font-mono uppercase tracking-wider text-muted-foreground flex items-center"
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <form
+            className="border bg-card p-3 sticky top-0 z-10"
+            onSubmit={(event) => {
+              event.preventDefault();
+            }}
+          >
+            <div className="space-y-2">
+              <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-9 text-2xs font-mono uppercase tracking-wider w-full"
+                  onClick={() => (isListening ? stopListening() : startListening())}
+                >
+                  {isListening ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+                  {isListening ? 'Listening' : 'Speak'}
+                </Button>
+                <div
+                  className={cn(
+                    'h-8 w-8 rounded-full border border-accent/40 bg-accent/10 flex items-center justify-center overflow-hidden',
+                    isSpeaking && 'bg-accent/30 shadow-[0_0_14px_hsl(var(--accent)/0.45)] animate-[pulse_0.9s_ease-in-out_infinite]',
+                  )}
+                  aria-label="Speaking indicator"
+                >
+                  <span
+                    className={cn(
+                      'h-0.5 w-4 bg-accent/60 transition-all',
+                      isSpeaking && 'animate-[pulse_0.7s_ease-in-out_infinite] bg-accent',
+                    )}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 text-2xs font-mono uppercase tracking-wider w-full"
+                  onClick={() => {
+                    stopListening();
+                    if (audioRef.current) {
+                      audioRef.current.pause();
+                      audioRef.current.currentTime = 0;
+                    }
+                    setIsSpeaking(false);
+                  }}
+                >
+                  Stop
+                </Button>
+              </div>
+            </div>
+          </form>
+
+          <div className="flex-1 border bg-card overflow-auto mb-6">
+            <div className="border-b px-3 py-1.5 bg-muted/30 flex items-center gap-2">
+              <MessageSquare className="h-3 w-3 text-accent" />
+              <span className="text-2xs font-mono uppercase tracking-wider text-muted-foreground">Conversation</span>
+            </div>
+            <div ref={scrollRef} className="p-3 space-y-3 max-h-[48vh] overflow-auto">
+              {messages.map((msg, idx) => {
+                const isAgent = msg.role === 'agent';
+                const prev = messages[idx - 1];
+                const retryTarget = isAgent && msg.status === 'error' ? prev : null;
+
+                return (
+                  <div
+                    key={msg.id}
+                    className={cn(
+                      'rounded-md px-3 py-2 text-2xs leading-relaxed',
+                      isAgent ? 'bg-muted/40 text-foreground' : 'bg-accent/10 text-foreground',
+                    )}
+                  >
+                    <p className="font-mono uppercase tracking-wider text-[10px] text-muted-foreground mb-1">
+                      {isAgent ? 'Agent' : 'You'}
+                    </p>
+                    <p>{msg.content}</p>
+                    {isAgent && msg.status === 'error' && retryTarget?.role === 'user' && (
+                      <div className="mt-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-2xs font-mono uppercase tracking-wider"
+                          onClick={() => void submit(retryTarget.content, { speak: true })}
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {isThinking && (
+                <div className="rounded-md px-3 py-2 text-2xs leading-relaxed bg-muted/40 text-foreground">
+                  <p className="font-mono uppercase tracking-wider text-[10px] text-muted-foreground mb-1">Agent</p>
+                  <p>Thinking...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
